@@ -22,3 +22,14 @@ jwt_output.txt
 # OS
 .DS_Store
 Thumbs.db
+
+# Node.js / Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.env.local
+.env.*.local
