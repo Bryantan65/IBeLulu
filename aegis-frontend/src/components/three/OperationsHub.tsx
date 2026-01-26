@@ -5,7 +5,7 @@ import { useOperationsStore } from '../../store'
 import './OperationsHub.css'
 
 // Zone data representing estates
-const ZONES = [
+const ZONES: { id: string; name: string; position: [number, number, number]; risk: number }[] = [
     { id: 'zone-a', name: 'Tampines North', position: [-3, 0, -2], risk: 0.2 },
     { id: 'zone-b', name: 'Tampines Central', position: [0, 0, -2], risk: 0.5 },
     { id: 'zone-c', name: 'Tampines East', position: [3, 0, -2], risk: 0.8 },
@@ -17,7 +17,7 @@ const ZONES = [
 ]
 
 // Mock clusters
-const CLUSTERS = [
+const CLUSTERS: { id: string; zoneId: string; severity: number; urgency: string; position: [number, number, number] }[] = [
     { id: 'cluster-1', zoneId: 'zone-c', severity: 4, urgency: 'TODAY', position: [3, 1.5, -2] },
     { id: 'cluster-2', zoneId: 'zone-e', severity: 3, urgency: '48H', position: [0, 1.2, 1] },
     { id: 'cluster-3', zoneId: 'zone-h', severity: 5, urgency: 'TODAY', position: [1.5, 2, 4] },
@@ -155,10 +155,10 @@ export default function OperationsHub() {
             raycaster.setFromCamera(mouse, camera)
             const intersects = raycaster.intersectObjects([...zones.values(), ...clusters.values()])
 
-            if (intersects.length > 0) {
+            if (intersects.length > 0 && intersects[0]) {
                 const obj = intersects[0].object
-                const userData = obj.userData
-                setHoveredItem({ type: userData.type, name: userData.name || userData.id })
+                const userData = obj?.userData
+                setHoveredItem({ type: userData?.type, name: userData?.name || userData?.id })
                 container.style.cursor = 'pointer'
                 controls.autoRotate = false
             } else {
@@ -176,7 +176,7 @@ export default function OperationsHub() {
             raycaster.setFromCamera(mouse, camera)
             const intersects = raycaster.intersectObjects([...zones.values(), ...clusters.values()])
 
-            if (intersects.length > 0) {
+            if (intersects.length > 0 && intersects[0]) {
                 const userData = intersects[0].object.userData
                 if (userData.type === 'zone') {
                     selectZone(userData.id)
@@ -209,7 +209,9 @@ export default function OperationsHub() {
 
             controls.update()
             renderer.render(scene, camera)
-            sceneRef.current!.animationId = requestAnimationFrame(animate)
+            if (sceneRef.current) {
+                sceneRef.current.animationId = requestAnimationFrame(animate)
+            }
         }
 
         sceneRef.current = { scene, camera, renderer, controls, zones, clusters, animationId: 0 }
@@ -231,7 +233,9 @@ export default function OperationsHub() {
             window.removeEventListener('resize', handleResize)
             container.removeEventListener('mousemove', onMouseMove)
             container.removeEventListener('click', onClick)
-            cancelAnimationFrame(sceneRef.current!.animationId)
+            if (sceneRef.current) {
+                cancelAnimationFrame(sceneRef.current.animationId)
+            }
             renderer.dispose()
             container.removeChild(renderer.domElement)
             setSceneReady(false)
