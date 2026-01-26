@@ -26,8 +26,8 @@ export default function Complaints() {
                 </button>
             </div>
 
-            {/* Table */}
-            <Card padding="none">
+            {/* Desktop/Tablet Table View */}
+            <Card padding="none" className="complaints__table-container">
                 <table className="complaints__table">
                     <thead>
                         <tr>
@@ -69,6 +69,48 @@ export default function Complaints() {
                     </tbody>
                 </table>
             </Card>
+
+            {/* Mobile Card View */}
+            <div className="complaints__mobile-cards">
+                {mockComplaints.map((complaint) => (
+                    <Card key={complaint.id} className="complaints__mobile-card">
+                        <div className="complaints__mobile-card-header">
+                            <span className="complaints__id">{complaint.id}</span>
+                            <Badge variant={complaint.status === 'LINKED' ? 'success' : 'info'} size="sm">
+                                {complaint.status}
+                            </Badge>
+                        </div>
+                        <div className="complaints__mobile-card-content">
+                            <div className="complaints__mobile-row">
+                                <span className="complaints__mobile-label">Category</span>
+                                <span className="complaints__mobile-value">{complaint.category}</span>
+                            </div>
+                            <div className="complaints__mobile-row">
+                                <span className="complaints__mobile-label">Severity</span>
+                                <SeverityBadge level={complaint.severity} />
+                            </div>
+                            <div className="complaints__mobile-row">
+                                <span className="complaints__mobile-label">Urgency</span>
+                                <Badge variant={complaint.urgency === 'TODAY' ? 'danger' : complaint.urgency === '48H' ? 'warning' : 'neutral'} size="sm">
+                                    {complaint.urgency}
+                                </Badge>
+                            </div>
+                            <div className="complaints__mobile-row">
+                                <span className="complaints__mobile-label">Confidence</span>
+                                <ConfidenceMeter value={complaint.confidence} />
+                            </div>
+                            <div className="complaints__mobile-row">
+                                <span className="complaints__mobile-label">Location</span>
+                                <span className="complaints__mobile-value">{complaint.location}</span>
+                            </div>
+                            <div className="complaints__mobile-row">
+                                <span className="complaints__mobile-label">Time</span>
+                                <span className="complaints__mobile-value complaints__time">{complaint.time}</span>
+                            </div>
+                        </div>
+                    </Card>
+                ))}
+            </div>
         </div>
     )
 }

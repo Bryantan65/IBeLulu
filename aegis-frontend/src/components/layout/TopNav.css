@@ -12,10 +12,32 @@
 }
 
 /* Title */
-.topnav__title-group {
+.topnav__titlegroup {
     display: flex;
     align-items: baseline;
     gap: var(--space-3);
+}
+
+/* Mobile menu button */
+.topnav__mobile-menu-btn {
+    display: none;
+    /* Hidden by default on desktop */
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    margin-right: var(--space-3);
+    border: none;
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    transition: all var(--duration-fast) var(--easing-default);
+}
+
+.topnav__mobile-menu-btn:hover {
+    background: var(--color-bg-surface);
+    color: var(--color-text-primary);
 }
 
 .topnav__title {
@@ -132,4 +154,49 @@
 .topnav__user-role {
     font-size: var(--text-xs);
     color: var(--color-text-muted);
+}
+
+/* Mobile responsiveness (<768px) */
+@media (max-width: 768px) {
+    .topnav {
+        padding: 0 var(--space-4);
+    }
+
+    /* Show hamburger menu button on mobile */
+    .topnav__mobile-menu-btn {
+        display: flex;
+    }
+
+    /* Hide subtitle on small screens */
+    .topnav__subtitle {
+        display: none;
+    }
+
+    /* Reduce title size on mobile */
+    .topnav__title {
+        font-size: var(--text-xl);
+    }
+
+    /* Hide dispatch button text, show icon only */
+    .topnav__action span {
+        display: none;
+    }
+
+    .topnav__action {
+        padding: var(--space-2);
+        width: 40px;
+        height: 40px;
+        justify-content: center;
+    }
+
+    /* Hide user info text on mobile */
+    .topnav__user-info {
+        display: none;
+    }
+
+    .topnav__user {
+        margin-left: 0;
+        padding-left: var(--space-2);
+        border-left: none;
+    }
 }

@@ -11,8 +11,9 @@ import {
     BarChart3,
     ChevronLeft,
     Shield,
+    X,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './Sidebar.css'
 
 interface NavItem {
@@ -20,6 +21,11 @@ interface NavItem {
     icon: React.ReactNode
     href: string
     badge?: number
+}
+
+interface SidebarProps {
+    mobileMenuOpen?: boolean
+    onMobileMenuClose?: () => void
 }
 
 const navGroups: { title: string; items: NavItem[] }[] = [
@@ -54,57 +60,95 @@ const navGroups: { title: string; items: NavItem[] }[] = [
     },
 ]
 
-export default function Sidebar() {
+export default function Sidebar({ mobileMenuOpen = false, onMobileMenuClose }: SidebarProps) {
     const [collapsed, setCollapsed] = useState(false)
 
+    // Close mobile menu on navigation click
+    const handleLinkClick = () => {
+        if (onMobileMenuClose) {
+            onMobileMenuClose()
+        }
+    }
+
+    // Prevent body scroll when mobile menu is open
+    useEffect(() => {
+        if (mobileMenuOpen) {
+            document.body.style.overflow = 'hidden'
+        } else {
+            document.body.style.overflow = ''
+        }
+        return () => {
+            document.body.style.overflow = ''
+        }
+    }, [mobileMenuOpen])
+
     return (
-        <aside className={`sidebar ${collapsed ? 'sidebar--collapsed' : ''}`}>
-            <div className="sidebar__header">
-                <div className="sidebar__logo">
-                    <Shield size={28} className="sidebar__logo-icon" />
-                    {!collapsed && <span className="sidebar__brand">AEGIS</span>}
-                </div>
-                <button
-                    className="sidebar__toggle"
-                    onClick={() => setCollapsed(!collapsed)}
-                    aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                >
-                    <ChevronLeft size={18} />
-                </button>
-            </div>
+        <>
+            {/* Mobile backdrop */}
+            {mobileMenuOpen && (
+                <div
+                    className="sidebar__backdrop"
+                    onClick={onMobileMenuClose}
+                    aria-hidden="true"
+                />
+            )}
 
-            <nav className="sidebar__nav">
-                {navGroups.map((group) => (
-                    <div key={group.title} className="sidebar__group">
-                        {!collapsed && <span className="sidebar__group-title">{group.title}</span>}
-                        <ul className="sidebar__list">
-                            {group.items.map((item) => (
-                                <li key={item.href}>
-                                    <NavLink
-                                        to={item.href}
-                                        className={({ isActive }) =>
-                                            `sidebar__link ${isActive ? 'sidebar__link--active' : ''}`
-                                        }
-                                        title={collapsed ? item.label : undefined}
-                                    >
-                                        <span className="sidebar__icon">{item.icon}</span>
-                                        {!collapsed && <span className="sidebar__label">{item.label}</span>}
-                                        {!collapsed && item.badge && (
-                                            <span className="sidebar__badge">{item.badge}</span>
-                                        )}
-                                    </NavLink>
-                                </li>
-                            ))}
-                        </ul>
+            <aside className={`sidebar ${collapsed ? 'sidebar--collapsed' : ''} ${mobileMenuOpen ? 'sidebar--mobile-open' : ''}`}>
+                <div className="sidebar__header">
+                    <div className="sidebar__logo">
+                        <Shield size={28} className="sidebar__logo-icon" />
+                        {!collapsed && <span className="sidebar__brand">AEGIS</span>}
                     </div>
-                ))}
-            </nav>
+                    <button
+                        className="sidebar__toggle sidebar__toggle--desktop"
+                        onClick={() => setCollapsed(!collapsed)}
+                        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                    >
+                        <ChevronLeft size={18} />
+                    </button>
+                    <button
+                        className="sidebar__toggle sidebar__toggle--mobile"
+                        onClick={onMobileMenuClose}
+                        aria-label="Close menu"
+                    >
+                        <X size={20} />
+                    </button>
+                </div>
 
-            <div className="sidebar__footer">
-                {!collapsed && (
-                    <span className="sidebar__version">v0.1.0 • MVP</span>
-                )}
-            </div>
-        </aside>
+                <nav className="sidebar__nav">
+                    {navGroups.map((group) => (
+                        <div key={group.title} className="sidebar__group">
+                            {!collapsed && <span className="sidebar__group-title">{group.title}</span>}
+                            <ul className="sidebar__list">
+                                {group.items.map((item) => (
+                                    <li key={item.href}>
+                                        <NavLink
+                                            to={item.href}
+                                            className={({ isActive }) =>
+                                                `sidebar__link ${isActive ? 'sidebar__link--active' : ''}`
+                                            }
+                                            title={collapsed ? item.label : undefined}
+                                            onClick={handleLinkClick}
+                                        >
+                                            <span className="sidebar__icon">{item.icon}</span>
+                                            {!collapsed && <span className="sidebar__label">{item.label}</span>}
+                                            {!collapsed && item.badge && (
+                                                <span className="sidebar__badge">{item.badge}</span>
+                                            )}
+                                        </NavLink>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    ))}
+                </nav>
+
+                <div className="sidebar__footer">
+                    {!collapsed && (
+                        <span className="sidebar__version">v0.1.0 • MVP</span>
+                    )}
+                </div>
+            </aside>
+        </>
     )
 }

@@ -1,15 +1,23 @@
-import { Bell, Send, User, Settings } from 'lucide-react'
+import { Bell, Send, User, Settings, Menu } from 'lucide-react'
 import './TopNav.css'
 
 interface TopNavProps {
     title: string
     subtitle?: string
+    onMobileMenuToggle?: () => void
 }
 
-export default function TopNav({ title, subtitle }: TopNavProps) {
+export default function TopNav({ title, subtitle, onMobileMenuToggle }: TopNavProps) {
     return (
         <header className="topnav">
             <div className="topnav__title-group">
+                <button
+                    className="topnav__mobile-menu-btn"
+                    onClick={onMobileMenuToggle}
+                    aria-label="Open menu"
+                >
+                    <Menu size={24} />
+                </button>
                 <h1 className="topnav__title">{title}</h1>
                 {subtitle && <span className="topnav__subtitle">{subtitle}</span>}
             </div>

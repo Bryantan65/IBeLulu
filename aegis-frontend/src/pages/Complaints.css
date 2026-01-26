@@ -57,7 +57,11 @@
     color: var(--color-text-primary);
 }
 
-/* Table */
+/* Table - Desktop/Tablet */
+.complaints__table-container {
+    display: block;
+}
+
 .complaints__table {
     width: 100%;
     border-collapse: collapse;
@@ -161,4 +165,70 @@
     font-weight: var(--font-medium);
     color: var(--color-text-muted);
     min-width: 36px;
+}
+
+/* Mobile Cards - Hidden by default */
+.complaints__mobile-cards {
+    display: none;
+}
+
+/* Mobile Responsiveness (<768px) */
+@media (max-width: 768px) {
+
+    /* Hide table on mobile */
+    .complaints__table-container {
+        display: none;
+    }
+
+    /* Show cards on mobile */
+    .complaints__mobile-cards {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+    }
+
+    .complaints__mobile-card {
+        padding: var(--space-4);
+    }
+
+    .complaints__mobile-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: var(--space-3);
+        padding-bottom: var(--space-3);
+        border-bottom: 1px solid var(--color-border);
+    }
+
+    .complaints__mobile-card-content {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+    }
+
+    .complaints__mobile-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        min-height: 24px;
+    }
+
+    .complaints__mobile-label {
+        font-size: var(--text-sm);
+        font-weight: var(--font-medium);
+        color: var(--color-text-muted);
+    }
+
+    .complaints__mobile-value {
+        font-size: var(--text-base);
+        color: var(--color-text-primary);
+        text-align: right;
+    }
+
+    /* Ensure confidence meter fits */
+    .confidence-meter {
+        flex: 1;
+        justify-content: flex-end;
+        max-width: 120px;
+    }
 }
