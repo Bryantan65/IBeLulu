@@ -1,0 +1,119 @@
+.review-queue {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.review-queue__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.review-queue__count {
+    font-size: var(--text-base);
+    color: var(--color-text-secondary);
+}
+
+.review-queue__items {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+/* Review Card */
+.review-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.review-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.review-card__title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.review-card__cluster-id {
+    font-size: var(--text-lg);
+    font-weight: var(--font-bold);
+    color: var(--color-text-primary);
+}
+
+.review-card__meta {
+    display: flex;
+    gap: var(--space-6);
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+}
+
+.review-card__section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.review-card__section h4 {
+    font-size: var(--text-sm);
+    font-weight: var(--font-semibold);
+    color: var(--color-text-secondary);
+}
+
+.review-card__section p {
+    font-size: var(--text-base);
+    line-height: 1.6;
+}
+
+.review-card__playbook code {
+    display: inline-block;
+    background: var(--color-bg-surface);
+    color: var(--color-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--text-base);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+}
+
+.review-card__fairness {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--color-secondary);
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+}
+
+.review-card__actions {
+    display: flex;
+    gap: var(--space-3);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--color-border);
+}
+
+/* Empty state */
+.review-queue__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-16);
+    color: var(--color-text-muted);
+    text-align: center;
+}
+
+.review-queue__empty h3 {
+    margin-top: var(--space-4);
+    color: var(--color-success);
+}
+
+.review-queue__empty p {
+    margin-top: var(--space-2);
+}

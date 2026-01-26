@@ -1,0 +1,210 @@
+.tomorrow-plan {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+}
+
+/* Weather */
+.tomorrow-plan__weather {
+    padding: var(--space-4);
+}
+
+.tomorrow-plan__weather h3 {
+    font-size: var(--text-lg);
+    margin-bottom: var(--space-4);
+}
+
+.tomorrow-plan__weather-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-4);
+    margin-bottom: var(--space-4);
+}
+
+.tomorrow-plan__signal {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-4);
+    background: var(--color-bg-surface);
+    border-radius: var(--radius-md);
+}
+
+.tomorrow-plan__signal-value {
+    font-size: var(--text-2xl);
+    font-weight: var(--font-bold);
+    color: var(--color-text-primary);
+}
+
+.tomorrow-plan__signal-label {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+}
+
+.tomorrow-plan__alert {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    background: rgba(245, 158, 11, 0.1);
+    border-radius: var(--radius-md);
+    color: var(--color-warning);
+    font-size: var(--text-sm);
+}
+
+/* Content */
+.tomorrow-plan__content {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: var(--space-4);
+}
+
+@media (max-width: 768px) {
+    .tomorrow-plan__content {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Forecasts */
+.tomorrow-plan__forecasts h3,
+.tomorrow-plan__tasks h3 {
+    font-size: var(--text-lg);
+    margin-bottom: var(--space-4);
+}
+
+.tomorrow-plan__forecast-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.tomorrow-plan__forecast {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.tomorrow-plan__forecast-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.tomorrow-plan__forecast-zone {
+    font-weight: var(--font-semibold);
+    color: var(--color-text-primary);
+}
+
+.tomorrow-plan__forecast-reason {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+}
+
+/* Risk Meter */
+.risk-meter {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.risk-meter__bar {
+    width: 60px;
+    height: 6px;
+    background: var(--color-bg-surface);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.risk-meter__fill {
+    height: 100%;
+    border-radius: var(--radius-full);
+}
+
+.risk-meter__value {
+    font-size: var(--text-sm);
+    font-weight: var(--font-semibold);
+    min-width: 40px;
+}
+
+/* Tasks */
+.tomorrow-plan__task-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+}
+
+.tomorrow-plan__task {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--easing-default);
+}
+
+.tomorrow-plan__task:hover {
+    border-color: var(--color-primary);
+}
+
+.tomorrow-plan__task input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--color-primary);
+}
+
+.tomorrow-plan__task-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.tomorrow-plan__task-type {
+    font-size: var(--text-sm);
+    font-weight: var(--font-medium);
+    color: var(--color-text-primary);
+    text-transform: capitalize;
+}
+
+.tomorrow-plan__task-zone {
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+}
+
+.tomorrow-plan__add-btn {
+    width: 100%;
+}
+
+/* Preview */
+.tomorrow-plan__preview {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    padding: var(--space-4);
+}
+
+.tomorrow-plan__preview span {
+    color: var(--color-text-secondary);
+}
+
+.tomorrow-plan__preview strong {
+    color: var(--color-primary);
+}
+
+/* Utility */
+.text-info {
+    color: var(--color-info);
+}
+
+.text-warning {
+    color: var(--color-warning);
+}
+
+.text-primary {
+    color: var(--color-primary);
+}

@@ -1,0 +1,109 @@
+.outcomes {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+}
+
+/* KPIs */
+.outcomes__kpis {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: var(--space-4);
+}
+
+@media (max-width: 1200px) {
+    .outcomes__kpis {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .outcomes__kpis {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* Chart */
+.outcomes__chart {
+    padding: var(--space-6);
+}
+
+.outcomes__chart h3 {
+    font-size: var(--text-lg);
+    margin-bottom: var(--space-4);
+}
+
+.outcomes__chart-container {
+    width: 100%;
+}
+
+/* Playbooks */
+.outcomes__playbooks {
+    padding: var(--space-6);
+}
+
+.outcomes__playbooks h3 {
+    font-size: var(--text-lg);
+    margin-bottom: var(--space-4);
+}
+
+.outcomes__table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.outcomes__table th,
+.outcomes__table td {
+    text-align: left;
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.outcomes__table th {
+    font-size: var(--text-sm);
+    font-weight: var(--font-semibold);
+    color: var(--color-text-secondary);
+    background: var(--color-bg-surface);
+}
+
+.outcomes__playbook-name {
+    font-weight: var(--font-medium);
+    text-transform: capitalize;
+}
+
+.outcomes__success {
+    color: var(--color-success);
+    font-weight: var(--font-semibold);
+}
+
+.outcomes__fail {
+    color: var(--color-danger);
+    font-weight: var(--font-semibold);
+}
+
+.outcomes__rate {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.outcomes__rate-bar {
+    width: 100px;
+    height: 8px;
+    background: var(--color-bg-surface);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.outcomes__rate-fill {
+    height: 100%;
+    background: var(--color-success);
+    border-radius: var(--radius-full);
+}
+
+.outcomes__rate span {
+    font-size: var(--text-sm);
+    font-weight: var(--font-semibold);
+    color: var(--color-success);
+    min-width: 40px;
+}
