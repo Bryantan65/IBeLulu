@@ -114,12 +114,20 @@ Hotspot clusters are persistent entities with state transitions. Agents operate 
 
 ### Components
 - **Services:** API server + database + job scheduler (daily forecast job)
-- **Agents:**
+- **Agents (powered by IBM watsonx.ai):**
   - ComplaintsAgent (triage)
   - ReviewAgent (playbook + fairness + gating)
   - SchedulingAgent (run sheet generation)
   - ForecastAgent (tomorrow risk + proactive tasks)
   - Verification flow (human + optional evidence checks)
+  
+**Agent Implementation:**
+All agents will use **IBM watsonx.ai foundation models** (Granite 13B or Llama 3) for LLM-powered decision-making. Each agent will:
+- Call watsonx.ai API with structured prompts
+- Receive JSON-formatted responses
+- Apply business rules and guardrails
+- Log decisions to audit_log for transparency
+- Use watsonx.governance for explainable AI compliance
 
 ---
 
