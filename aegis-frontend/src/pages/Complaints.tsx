@@ -10,13 +10,18 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 interface Complaint {
     id: string
     text: string
-    location: string
-    category: string
-    severity: number
-    urgency: string
-    confidence: number
-    state: string
+    location_label: string | null
+    category_pred: string | null
+    severity_pred: number | null
+    urgency_pred: string | null
+    confidence: number | null
+    status: string | null
     created_at: string
+    lat: number | null
+    lng: number | null
+    photo_url: string | null
+    user_id: string | null
+    cluster_id: string | null
 }
 
 interface FormData {
@@ -100,11 +105,11 @@ export default function Complaints() {
                 },
                 body: JSON.stringify({
                     text: formData.text,
-                    location: formData.location,
-                    category: formData.category,
-                    urgency: formData.urgency,
-                    severity: formData.severity,
-                    state: 'received',
+                    location_label: formData.location,
+                    category_pred: formData.category,
+                    urgency_pred: formData.urgency,
+                    severity_pred: formData.severity,
+                    status: 'RECEIVED',
                     confidence: 0.5
                 })
             })
@@ -259,20 +264,20 @@ export default function Complaints() {
                                 <td className="complaints__id">{complaint.id.substring(0, 8)}</td>
                                 <td className="complaints__text">{complaint.text}</td>
                                 <td className="complaints__location">
-                                    <MapPin size={12} /> {complaint.location}
+                                    <MapPin size={12} /> {complaint.location_label || 'N/A'}
                                 </td>
-                                <td>{complaint.category}</td>
+                                <td>{complaint.category_pred || 'Uncategorized'}</td>
                                 <td>
-                                    <SeverityBadge level={complaint.severity} />
+                                    <SeverityBadge level={complaint.severity_pred || 3} />
                                 </td>
                                 <td>
-                                    <Badge variant={(complaint.urgency || '48h') === 'today' ? 'danger' : (complaint.urgency || '48h') === '48h' ? 'warning' : 'neutral'} size="sm">
-                                        {(complaint.urgency || '48h').toUpperCase()}
+                                    <Badge variant={(complaint.urgency_pred || '48h') === 'today' ? 'danger' : (complaint.urgency_pred || '48h') === '48h' ? 'warning' : 'neutral'} size="sm">
+                                        {(complaint.urgency_pred || '48h').toUpperCase()}
                                     </Badge>
                                 </td>
                                 <td>
-                                    <Badge variant={(complaint.state || 'received') === 'clustered' ? 'success' : 'info'} size="sm">
-                                        {(complaint.state || 'received').toUpperCase()}
+                                    <Badge variant={(complaint.status || 'RECEIVED') === 'CLUSTERED' ? 'success' : 'info'} size="sm">
+                                        {(complaint.status || 'RECEIVED').toUpperCase()}
                                     </Badge>
                                 </td>
                                 <td className="complaints__time">{getTimeAgo(complaint.created_at)}</td>
@@ -288,8 +293,8 @@ export default function Complaints() {
                     <Card key={complaint.id} className="complaints__mobile-card">
                         <div className="complaints__mobile-card-header">
                             <span className="complaints__id">{complaint.id.substring(0, 8)}</span>
-                            <Badge variant={(complaint.state || 'received') === 'clustered' ? 'success' : 'info'} size="sm">
-                                {((complaint.state || 'received')).toUpperCase()}
+                            <Badge variant={(complaint.status || 'RECEIVED') === 'CLUSTERED' ? 'success' : 'info'} size="sm">
+                                {((complaint.status || 'RECEIVED')).toUpperCase()}
                             </Badge>
                         </div>
                         <div className="complaints__mobile-card-content">
@@ -299,15 +304,15 @@ export default function Complaints() {
                             </div>
                             <div className="complaints__mobile-row">
                                 <span className="complaints__mobile-label">Location</span>
-                                <span className="complaints__mobile-value">{complaint.location}</span>
+                                <span className="complaints__mobile-value">{complaint.location_label || 'N/A'}</span>
                             </div>
                             <div className="complaints__mobile-row">
                                 <span className="complaints__mobile-label">Category</span>
-                                <span className="complaints__mobile-value">{complaint.category}</span>
+                                <span className="complaints__mobile-value">{complaint.category_pred || 'Uncategorized'}</span>
                             </div>
                             <div className="complaints__mobile-row">
                                 <span className="complaints__mobile-label">Severity</span>
-                                <SeverityBadge level={complaint.severity} />
+                                <SeverityBadge level={complaint.severity_pred || 3} />
                             </div>
                             <div className="complaints__mobile-row">
                                 <span className="complaints__mobile-label">Time</span>
