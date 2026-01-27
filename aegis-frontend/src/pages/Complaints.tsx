@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { sendMessageToAgent, ChatMessage } from '../services/orchestrate'
-import { Badge, Card } from '../components/ui'
-import { Search, Filter, ArrowUpDown, Send, User, Bot, Loader2 } from 'lucide-react'
+import { Badge, Card, Button } from '../components/ui'
+import { Search, ArrowUpDown, Send, User, Bot, Loader2, Plus, MapPin, X } from 'lucide-react'
 import './Complaints.css'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -19,11 +19,118 @@ interface Complaint {
     created_at: string
 }
 
+interface FormData {
+    text: string
+    location: string
+    category: string
+    urgency: string
+    severity: number
+}
+
+function getTimeAgo(dateString: string): string {
+    const now = new Date()
+    const date = new Date(dateString)
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+
+    if (diffMins < 1) return 'Just now'
+    if (diffMins < 60) return `${diffMins}m ago`
+
+    const diffHours = Math.floor(diffMins / 60)
+    if (diffHours < 24) return `${diffHours}h ago`
+
+    const diffDays = Math.floor(diffHours / 24)
+    if (diffDays < 7) return `${diffDays}d ago`
+
+    return date.toLocaleDateString()
+}
+
 export default function Complaints() {
+    // Chat state
     const [messages, setMessages] = useState<ChatMessage[]>([])
     const [input, setInput] = useState('')
     const [isLoading, setIsLoading] = useState(false)
     const messagesEndRef = useRef<HTMLDivElement>(null)
+
+    // Complaints list state
+    const [complaints, setComplaints] = useState<Complaint[]>([])
+
+    // Form state
+    const [showForm, setShowForm] = useState(false)
+    const [submitting, setSubmitting] = useState(false)
+    const [formData, setFormData] = useState<FormData>({
+        text: '',
+        location: '',
+        category: 'bin_overflow',
+        urgency: '48h',
+        severity: 3
+    })
+
+    // Fetch complaints from Supabase
+    const fetchComplaints = async () => {
+        try {
+            const response = await fetch(`${SUPABASE_URL}/rest/v1/complaints?order=created_at.desc`, {
+                headers: {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                }
+            })
+            if (response.ok) {
+                const data = await response.json()
+                setComplaints(data)
+            }
+        } catch (error) {
+            console.error('Failed to fetch complaints:', error)
+        }
+    }
+
+    // Submit new complaint
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setSubmitting(true)
+
+        try {
+            const response = await fetch(`${SUPABASE_URL}/rest/v1/complaints`, {
+                method: 'POST',
+                headers: {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=representation'
+                },
+                body: JSON.stringify({
+                    text: formData.text,
+                    location: formData.location,
+                    category: formData.category,
+                    urgency: formData.urgency,
+                    severity: formData.severity,
+                    state: 'received',
+                    confidence: 0.5
+                })
+            })
+
+            if (response.ok) {
+                setShowForm(false)
+                setFormData({
+                    text: '',
+                    location: '',
+                    category: 'bin_overflow',
+                    urgency: '48h',
+                    severity: 3
+                })
+                fetchComplaints() // Refresh the list
+            }
+        } catch (error) {
+            console.error('Failed to submit complaint:', error)
+        } finally {
+            setSubmitting(false)
+        }
+    }
+
+    // Load complaints on mount
+    useEffect(() => {
+        fetchComplaints()
+    }, [])
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
