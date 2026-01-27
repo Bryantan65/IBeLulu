@@ -1,15 +1,4 @@
 services:
-  # 1. Frontend: The Dashboard
-  frontend:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.frontend
-    ports:
-      - "5173:5173"
-    volumes:
-      - ../aegis-frontend/src:/app/src
-    restart: always
-
   # 2. Auth: The Python Server
   auth:
     build:
@@ -32,9 +21,9 @@ services:
       dockerfile: docker/Dockerfile.proxy
     ports:
       - "3001:3001"
-    # CHANGED: Now looking for .env.local explicitly
+    # CHANGED: Now looking for .env.local explicitly in aegis-frontend
     env_file:
-      - ../.env.local
+      - ../aegis-frontend/.env.local
     environment:
       - PORT=3001
     restart: always
