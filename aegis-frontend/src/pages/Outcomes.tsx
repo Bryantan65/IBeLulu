@@ -77,19 +77,19 @@ export default function Outcomes() {
                 <div className="outcomes__chart-container">
                     <ResponsiveContainer width="100%" height={300}>
                         <LineChart data={mockTrendData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
-                            <XAxis dataKey="day" stroke="#6B7280" fontSize={12} />
-                            <YAxis stroke="#6B7280" fontSize={12} />
+                            <CartesianGrid strokeDasharray="3 3" stroke="#E3EBEF" />
+                            <XAxis dataKey="day" stroke="#667680" fontSize={12} />
+                            <YAxis stroke="#667680" fontSize={12} />
                             <Tooltip
                                 contentStyle={{
-                                    background: '#1F2937',
-                                    border: '1px solid rgba(255,255,255,0.08)',
+                                    background: '#FFFFFF',
+                                    border: '1px solid #CBD7DE',
                                     borderRadius: '8px',
                                 }}
                             />
-                            <Line type="monotone" dataKey="dispatch" stroke="#0D9488" strokeWidth={2} dot={false} name="Dispatch (h)" />
-                            <Line type="monotone" dataKey="resolve" stroke="#6366F1" strokeWidth={2} dot={false} name="Resolve (h)" />
-                            <Line type="monotone" dataKey="repeat" stroke="#EF4444" strokeWidth={2} dot={false} name="Repeat (%)" />
+                            <Line type="monotone" dataKey="dispatch" stroke="#1A3F4E" strokeWidth={2} dot={false} name="Dispatch (h)" />
+                            <Line type="monotone" dataKey="resolve" stroke="#77AC59" strokeWidth={2} dot={false} name="Resolve (h)" />
+                            <Line type="monotone" dataKey="repeat" stroke="#C2413A" strokeWidth={2} dot={false} name="Repeat (%)" />
                         </LineChart>
                     </ResponsiveContainer>
                 </div>

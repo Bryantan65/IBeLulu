@@ -1,5 +1,9 @@
 # IBM watsonx Orchestrate - Complete Setup Guide
 
+> ⚠️ **ARCHIVED DOCUMENTATION**  
+> This guide documents the initial setup process. The project has been migrated to use **Supabase Edge Functions** for JWT generation.  
+> See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for current deployment instructions.
+
 **Complete guide for setting up authenticated embedded chat with IBM watsonx Orchestrate**
 
 ---

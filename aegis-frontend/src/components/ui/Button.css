@@ -39,21 +39,38 @@
 /* Variants */
 .btn--primary {
     background: var(--color-primary);
-    color: white;
+    color: var(--color-text-inverse);
 }
 
 .btn--primary:hover:not(:disabled) {
-    background: var(--color-primary-dark);
+    background: var(--color-primary-hover);
+}
+
+.btn--primary:active:not(:disabled) {
+    background: var(--color-primary-active);
 }
 
 .btn--secondary {
-    background: transparent;
-    color: var(--color-secondary);
-    border: 1px solid var(--color-secondary);
+    background: var(--color-secondary);
+    color: var(--color-text-inverse);
 }
 
 .btn--secondary:hover:not(:disabled) {
-    background: rgba(99, 102, 241, 0.1);
+    background: var(--color-secondary-hover);
+}
+
+.btn--secondary:active:not(:disabled) {
+    background: var(--color-secondary-active);
+}
+
+.btn--outline {
+    background: transparent;
+    color: var(--color-primary);
+    border: 1px solid var(--color-primary);
+}
+
+.btn--outline:hover:not(:disabled) {
+    background: var(--color-primary-0);
 }
 
 .btn--ghost {
@@ -62,17 +79,17 @@
 }
 
 .btn--ghost:hover:not(:disabled) {
-    background: var(--color-bg-surface);
-    color: var(--color-text-primary);
+    background: var(--color-surface-2);
+    color: var(--color-text);
 }
 
 .btn--danger {
-    background: var(--color-danger);
+    background: var(--color-error);
     color: white;
 }
 
 .btn--danger:hover:not(:disabled) {
-    background: #DC2626;
+    background: #B33A34;
 }
 
 /* Icon */

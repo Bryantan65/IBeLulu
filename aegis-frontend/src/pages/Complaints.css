@@ -15,7 +15,7 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    background: var(--color-bg-elevated);
+    background: var(--color-surface-1);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     padding: 0 var(--space-3);
@@ -26,7 +26,7 @@
     flex: 1;
     background: transparent;
     border: none;
-    color: var(--color-text-primary);
+    color: var(--color-text);
     padding: var(--space-3) 0;
     font-size: var(--text-base);
 }
@@ -44,7 +44,7 @@
     align-items: center;
     gap: var(--space-2);
     padding: var(--space-3) var(--space-4);
-    background: var(--color-bg-elevated);
+    background: var(--color-surface-1);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     color: var(--color-text-secondary);
@@ -53,8 +53,8 @@
 }
 
 .complaints__filter-btn:hover {
-    background: var(--color-bg-surface);
-    color: var(--color-text-primary);
+    background: var(--color-surface-2);
+    color: var(--color-text);
 }
 
 /* Table - Desktop/Tablet */
@@ -71,14 +71,14 @@
 .complaints__table td {
     text-align: left;
     padding: var(--space-3) var(--space-4);
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-divider);
 }
 
 .complaints__table th {
     font-size: var(--text-sm);
     font-weight: var(--font-semibold);
     color: var(--color-text-secondary);
-    background: var(--color-bg-surface);
+    background: var(--color-surface-2);
     display: flex;
     align-items: center;
     gap: var(--space-2);
@@ -93,7 +93,7 @@
 }
 
 .complaints__table tbody tr:hover {
-    background: var(--color-bg-surface);
+    background: var(--color-surface-2);
 }
 
 .complaints__id {
@@ -124,7 +124,7 @@
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--color-bg-surface);
+    background: var(--color-n2);
 }
 
 .severity-badge__dot--success {
@@ -136,7 +136,7 @@
 }
 
 .severity-badge__dot--danger {
-    background: var(--color-danger);
+    background: var(--color-error);
 }
 
 /* Confidence Meter */
@@ -149,7 +149,7 @@
 .confidence-meter__bar {
     width: 60px;
     height: 6px;
-    background: var(--color-bg-surface);
+    background: var(--color-n2);
     border-radius: var(--radius-full);
     overflow: hidden;
 }
@@ -197,7 +197,7 @@
         align-items: center;
         margin-bottom: var(--space-3);
         padding-bottom: var(--space-3);
-        border-bottom: 1px solid var(--color-border);
+        border-bottom: 1px solid var(--color-divider);
     }
 
     .complaints__mobile-card-content {
@@ -221,7 +221,7 @@
 
     .complaints__mobile-value {
         font-size: var(--text-base);
-        color: var(--color-text-primary);
+        color: var(--color-text);
         text-align: right;
     }
 

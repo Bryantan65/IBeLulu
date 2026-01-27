@@ -77,6 +77,8 @@ export interface Simulation {
     }
 }
 
+export type ViewMode = 'global' | 'singapore'
+
 interface OperationsState {
     // Data
     complaints: Complaint[]
@@ -91,6 +93,8 @@ interface OperationsState {
     hoveredClusterId: string | null
 
     // 3D Scene State
+    viewMode: ViewMode
+    isTransitioning: boolean
     cameraTarget: [number, number, number]
     highlightedZones: string[]
     sceneReady: boolean
@@ -103,6 +107,8 @@ interface OperationsState {
     selectCluster: (id: string | null) => void
     selectZone: (id: string | null) => void
     hoverCluster: (id: string | null) => void
+    setViewMode: (mode: ViewMode) => void
+    setIsTransitioning: (transitioning: boolean) => void
     setCameraTarget: (target: [number, number, number]) => void
     setHighlightedZones: (zones: string[]) => void
     setSceneReady: (ready: boolean) => void
@@ -122,6 +128,8 @@ export const useOperationsStore = create<OperationsState>((set) => ({
     hoveredClusterId: null,
 
     // Initial 3D state
+    viewMode: 'global',
+    isTransitioning: false,
     cameraTarget: [0, 0, 0],
     highlightedZones: [],
     sceneReady: false,
@@ -134,7 +142,10 @@ export const useOperationsStore = create<OperationsState>((set) => ({
     selectCluster: (id) => set({ selectedClusterId: id }),
     selectZone: (id) => set({ selectedZoneId: id }),
     hoverCluster: (id) => set({ hoveredClusterId: id }),
+    setViewMode: (mode) => set({ viewMode: mode }),
+    setIsTransitioning: (transitioning) => set({ isTransitioning: transitioning }),
     setCameraTarget: (target) => set({ cameraTarget: target }),
     setHighlightedZones: (zones) => set({ highlightedZones: zones }),
     setSceneReady: (ready) => set({ sceneReady: ready }),
 }))
+

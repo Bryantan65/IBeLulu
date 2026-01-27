@@ -1,5 +1,0 @@
-ibm-watsonx-orchestrate
-PyJWT
-cryptography
-Flask
-Flask-CORS
