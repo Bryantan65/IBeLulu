@@ -65,19 +65,25 @@ async function getValidToken(): Promise<string> {
     }
 }
 
-export async function sendMessageToAgent(history: ChatMessage[]): Promise<string> {
-    const AGENT_ID = 'addd6d7a-97ab-44db-8774-30fb15f7a052';
+// New signature allows optional agentId. Defaults to "Complaints Agent" if not provided.
+// Complaints Agent ID: 'addd6d7a-97ab-44db-8774-30fb15f7a052'
+// Review Agent ID: 'f3c41796-118f-4f5a-a77c-e29890eaca6e'
+export async function sendMessageToAgent(history: ChatMessage[], agentId?: string): Promise<string> {
+    const TARGET_AGENT_ID = agentId || 'addd6d7a-97ab-44db-8774-30fb15f7a052';
     const INSTANCE_ID = '20260126-1332-1571-30ef-acf1a3847d97';
     // Use the proxy path configured in vite.config.ts
-    const URL = `/api/orchestrate/instances/${INSTANCE_ID}/v1/orchestrate/${AGENT_ID}/chat/completions`;
+    const URL = `/api/orchestrate/instances/${INSTANCE_ID}/v1/orchestrate/${TARGET_AGENT_ID}/chat/completions`;
 
     try {
         const token = await getValidToken();
 
-        // Convert simplified history to API format
+        // Use the format provided by the user in the CURL request:
+        // "content": [ { "response_type": "text", "text": "..." } ]
         const apiMessages = history.map(msg => ({
             role: msg.role,
-            content: msg.text
+            content: [
+                { response_type: 'text', text: msg.text }
+            ]
         }));
 
         const response = await fetch(URL, {
