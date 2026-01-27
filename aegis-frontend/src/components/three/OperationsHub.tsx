@@ -1,8 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { useOperationsStore } from '../../store'
+import { useOperationsStore, useThemeStore } from '../../store'
 import './OperationsHub.css'
+
+// Theme colors for the 3D scene
+const THEME_COLORS = {
+    light: {
+        background: 0xF6F8F9,
+        grid1: 0xCBD7DE,
+        grid2: 0xE3EBEF,
+        primary: 0x1A3F4E,
+    },
+    dark: {
+        background: 0x0B171C,
+        grid1: 0x243642,
+        grid2: 0x1A2D38,
+        primary: 0x3C8FB0,
+    },
+}
 
 // Zone data representing estates
 const ZONES: { id: string; name: string; position: [number, number, number]; risk: number }[] = [
@@ -32,11 +48,38 @@ export default function OperationsHub() {
         controls: OrbitControls
         zones: Map<string, THREE.Mesh>
         clusters: Map<string, THREE.Mesh>
+        gridHelper: THREE.GridHelper
+        shieldMaterial: THREE.MeshStandardMaterial
+        pointLight: THREE.PointLight
         animationId: number
     } | null>(null)
 
     const [hoveredItem, setHoveredItem] = useState<{ type: string; name: string } | null>(null)
     const { setSceneReady, selectZone, hoverCluster } = useOperationsStore()
+    const { theme } = useThemeStore()
+
+    // Update scene colors when theme changes
+    useEffect(() => {
+        if (!sceneRef.current) return
+        const { scene, gridHelper, shieldMaterial, pointLight } = sceneRef.current
+        const colors = THEME_COLORS[theme]
+
+        scene.background = new THREE.Color(colors.background)
+        scene.fog = new THREE.Fog(colors.background, 30, 80)
+
+        // Update grid colors
+        scene.remove(gridHelper)
+        const newGridHelper = new THREE.GridHelper(30, 30, colors.grid1, colors.grid2)
+        scene.add(newGridHelper)
+        sceneRef.current.gridHelper = newGridHelper
+
+        // Update shield core color
+        shieldMaterial.color.setHex(colors.primary)
+        shieldMaterial.emissive.setHex(colors.primary)
+
+        // Update point light color
+        pointLight.color.setHex(colors.primary)
+    }, [theme])
 
     useEffect(() => {
         if (!containerRef.current) return
@@ -44,11 +87,12 @@ export default function OperationsHub() {
         const container = containerRef.current
         const width = container.clientWidth
         const height = container.clientHeight
+        const colors = THEME_COLORS[theme]
 
         // Scene setup
         const scene = new THREE.Scene()
-        scene.background = new THREE.Color(0xF6F8F9)
-        scene.fog = new THREE.Fog(0xF6F8F9, 30, 80)
+        scene.background = new THREE.Color(colors.background)
+        scene.fog = new THREE.Fog(colors.background, 30, 80)
 
         // Camera
         const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000)
@@ -79,19 +123,19 @@ export default function OperationsHub() {
         directionalLight.position.set(10, 20, 10)
         scene.add(directionalLight)
 
-        const pointLight = new THREE.PointLight(0x1A3F4E, 1, 50)
+        const pointLight = new THREE.PointLight(colors.primary, 1, 50)
         pointLight.position.set(0, 10, 0)
         scene.add(pointLight)
 
         // Grid helper
-        const gridHelper = new THREE.GridHelper(30, 30, 0xCBD7DE, 0xE3EBEF)
+        const gridHelper = new THREE.GridHelper(30, 30, colors.grid1, colors.grid2)
         scene.add(gridHelper)
 
         // Central shield core
         const shieldGeometry = new THREE.OctahedronGeometry(1, 0)
         const shieldMaterial = new THREE.MeshStandardMaterial({
-            color: 0x1A3F4E,
-            emissive: 0x1A3F4E,
+            color: colors.primary,
+            emissive: colors.primary,
             emissiveIntensity: 0.5,
             metalness: 0.8,
             roughness: 0.2,
@@ -214,7 +258,7 @@ export default function OperationsHub() {
             }
         }
 
-        sceneRef.current = { scene, camera, renderer, controls, zones, clusters, animationId: 0 }
+        sceneRef.current = { scene, camera, renderer, controls, zones, clusters, gridHelper, shieldMaterial, pointLight, animationId: 0 }
         animate()
         setSceneReady(true)
 

@@ -117,6 +117,17 @@
     justify-content: center;
 }
 
+/* Theme Toggle */
+.topnav__theme-toggle {
+    color: var(--color-accent);
+}
+
+.topnav__theme-toggle:hover {
+    background: var(--color-surface-2);
+    color: var(--color-accent);
+    transform: rotate(15deg);
+}
+
 /* User */
 .topnav__user {
     display: flex;

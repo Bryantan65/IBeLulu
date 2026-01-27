@@ -92,6 +92,14 @@
 
   --color-accent: #E2AE17;
 
+  /* SIDEBAR COLORS (consistent across themes) */
+  --color-sidebar-bg: #1A3F4E;
+  --color-sidebar-border: #163642;
+  --color-sidebar-hover: #163642;
+  --color-sidebar-active: #142E39;
+  --color-sidebar-text: #E8EEF1;
+  --color-sidebar-text-muted: #859CA4;
+
   /* ========================================
      STATUS COLORS
      ======================================== */
@@ -197,4 +205,96 @@
   --z-overlay: 300;
   --z-modal: 400;
   --z-toast: 500;
+}
+
+/* ========================================
+   DARK MODE THEME
+   ======================================== */
+[data-theme="dark"] {
+  /* NEUTRALS (inverted: dark → light) */
+  --color-n0: #0B171C;
+  --color-n1: #122028;
+  --color-n2: #1A2D38;
+  --color-n3: #3D5261;
+  --color-n4: #8AA0AD;
+  --color-n5: #E8EEF1;
+
+  /* BACKGROUND LAYERS */
+  --color-bg: #0B171C;
+  --color-surface-1: #122028;
+  --color-surface-2: #1A2D38;
+  --color-elevated: #1F3642;
+  --color-overlay: #000000;
+
+  /* Legacy aliases */
+  --color-bg-elevated: var(--color-elevated);
+  --color-bg-surface: var(--color-surface-2);
+
+  /* BORDERS / DIVIDERS */
+  --color-border-subtle: #243642;
+  --color-border: #3D5261;
+  --color-border-strong: #5B7080;
+  --color-divider: #243642;
+
+  /* TEXT COLORS */
+  --color-text: #E8EEF1;
+  --color-text-secondary: #B8C8D0;
+  --color-text-muted: #8AA0AD;
+  --color-text-inverse: #0B171C;
+
+  /* Legacy aliases */
+  --color-text-primary: var(--color-text);
+
+  /* PRIMARY (lighter for dark mode) */
+  --color-primary: #3C8FB0;
+  --color-primary-hover: #4FA3C4;
+  --color-primary-active: #62B7D8;
+  --color-primary-light: #6BC4E8;
+  --color-primary-dark: #2B6B85;
+
+  /* SECONDARY (lighter green) */
+  --color-secondary: #8DC46B;
+  --color-secondary-hover: #9FD180;
+  --color-secondary-active: #B1DE95;
+  --color-secondary-light: #C4EBAA;
+  --color-secondary-dark: #6BA34A;
+
+  /* ACCENT (gold stays vibrant) */
+  --color-accent: #F2C94C;
+
+  /* STATUS COLORS (slightly brighter for dark) */
+  --color-success: #4CAF7D;
+  --color-success-subtle: #1A3328;
+
+  --color-warning: #F0A830;
+  --color-warning-subtle: #3D2B10;
+
+  --color-error: #E06058;
+  --color-error-subtle: #3D1A18;
+
+  --color-info: #4DA6E0;
+  --color-info-subtle: #142838;
+
+  /* Legacy alias */
+  --color-danger: var(--color-error);
+
+  /* FOCUS + LINKS */
+  --color-focus-ring: #4FA3C4;
+  --color-border-focus: #4FA3C4;
+  --color-link: #5CB8DB;
+  --color-link-hover: #7ACAE8;
+
+  /* CHART SERIES */
+  --color-chart-1: #4FA3C4;
+  --color-chart-2: #8DC46B;
+  --color-chart-3: #F2C94C;
+  --color-chart-4: #E06058;
+  --color-chart-5: #9B6FDC;
+  --color-chart-6: #5CB8DB;
+
+  /* SHADOWS (darker for dark mode) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+  --shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
 }

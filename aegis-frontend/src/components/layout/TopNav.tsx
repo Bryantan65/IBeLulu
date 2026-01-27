@@ -1,4 +1,5 @@
-import { Bell, Send, User, Settings, Menu } from 'lucide-react'
+import { Bell, Send, User, Settings, Menu, Sun, Moon } from 'lucide-react'
+import { useThemeStore } from '../../store'
 import './TopNav.css'
 
 interface TopNavProps {
@@ -8,6 +9,8 @@ interface TopNavProps {
 }
 
 export default function TopNav({ title, subtitle, onMobileMenuToggle }: TopNavProps) {
+    const { theme, toggleTheme } = useThemeStore()
+
     return (
         <header className="topnav">
             <div className="topnav__title-group">
@@ -31,6 +34,15 @@ export default function TopNav({ title, subtitle, onMobileMenuToggle }: TopNavPr
                 <button className="topnav__icon-btn topnav__notification">
                     <Bell size={20} />
                     <span className="topnav__notification-badge">3</span>
+                </button>
+
+                <button
+                    className="topnav__icon-btn topnav__theme-toggle"
+                    onClick={toggleTheme}
+                    aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+                    title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+                >
+                    {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
                 </button>
 
                 <button className="topnav__icon-btn">
