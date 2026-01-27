@@ -69,7 +69,7 @@
 .whatif__knob--readonly span {
     font-size: var(--text-lg);
     font-weight: var(--font-semibold);
-    color: var(--color-text-primary);
+    color: var(--color-text);
     padding: var(--space-2) 0;
 }
 
@@ -82,8 +82,9 @@
 .whatif__knob-input input[type="range"] {
     flex: 1;
     height: 6px;
+    appearance: none;
     -webkit-appearance: none;
-    background: var(--color-bg-surface);
+    background: var(--color-n2);
     border-radius: var(--radius-full);
 }
 
@@ -100,15 +101,15 @@
     min-width: 40px;
     font-size: var(--text-base);
     font-weight: var(--font-semibold);
-    color: var(--color-text-primary);
+    color: var(--color-text);
 }
 
 .whatif__knob select {
     padding: var(--space-2) var(--space-3);
-    background: var(--color-bg-surface);
+    background: var(--color-surface-1);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
-    color: var(--color-text-primary);
+    color: var(--color-text);
     font-size: var(--text-base);
 }
 
@@ -125,9 +126,10 @@
     align-items: center;
     gap: var(--space-3);
     padding: var(--space-4);
-    background: rgba(245, 158, 11, 0.1);
-    border-color: var(--color-warning);
-    color: var(--color-text-primary);
+    background: var(--color-warning-subtle);
+    border: 1px solid var(--color-warning);
+    border-radius: var(--radius-md);
+    color: var(--color-text);
 }
 
 .whatif__alert svg {

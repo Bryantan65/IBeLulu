@@ -47,8 +47,8 @@ export default function OperationsHub() {
 
         // Scene setup
         const scene = new THREE.Scene()
-        scene.background = new THREE.Color(0x0a0f1a)
-        scene.fog = new THREE.Fog(0x0a0f1a, 30, 80)
+        scene.background = new THREE.Color(0xF6F8F9)
+        scene.fog = new THREE.Fog(0xF6F8F9, 30, 80)
 
         // Camera
         const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000)
@@ -79,19 +79,19 @@ export default function OperationsHub() {
         directionalLight.position.set(10, 20, 10)
         scene.add(directionalLight)
 
-        const pointLight = new THREE.PointLight(0x0d9488, 1, 50)
+        const pointLight = new THREE.PointLight(0x1A3F4E, 1, 50)
         pointLight.position.set(0, 10, 0)
         scene.add(pointLight)
 
         // Grid helper
-        const gridHelper = new THREE.GridHelper(30, 30, 0x1f2937, 0x111827)
+        const gridHelper = new THREE.GridHelper(30, 30, 0xCBD7DE, 0xE3EBEF)
         scene.add(gridHelper)
 
         // Central shield core
         const shieldGeometry = new THREE.OctahedronGeometry(1, 0)
         const shieldMaterial = new THREE.MeshStandardMaterial({
-            color: 0x0d9488,
-            emissive: 0x0d9488,
+            color: 0x1A3F4E,
+            emissive: 0x1A3F4E,
             emissiveIntensity: 0.5,
             metalness: 0.8,
             roughness: 0.2,
@@ -106,8 +106,8 @@ export default function OperationsHub() {
         ZONES.forEach((zone) => {
             const hexGeometry = new THREE.CylinderGeometry(1.2, 1.2, 0.3, 6)
             const riskColor = new THREE.Color().lerpColors(
-                new THREE.Color(0x22c55e), // green
-                new THREE.Color(0xef4444), // red
+                new THREE.Color(0x2F8A5B), // success green
+                new THREE.Color(0xC2413A), // error red
                 zone.risk
             )
             const hexMaterial = new THREE.MeshStandardMaterial({
@@ -128,7 +128,7 @@ export default function OperationsHub() {
         const clusters = new Map<string, THREE.Mesh>()
         CLUSTERS.forEach((cluster) => {
             const orbGeometry = new THREE.SphereGeometry(0.3 + cluster.severity * 0.1, 16, 16)
-            const urgencyColor = cluster.urgency === 'TODAY' ? 0xef4444 : 0xf59e0b
+            const urgencyColor = cluster.urgency === 'TODAY' ? 0xC2413A : 0xD08700
             const orbMaterial = new THREE.MeshStandardMaterial({
                 color: urgencyColor,
                 emissive: urgencyColor,
@@ -252,15 +252,15 @@ export default function OperationsHub() {
             )}
             <div className="operations-hub__legend">
                 <div className="operations-hub__legend-item">
-                    <span className="operations-hub__legend-dot" style={{ background: '#22c55e' }} />
+                    <span className="operations-hub__legend-dot" style={{ background: '#2F8A5B' }} />
                     <span>Low Risk</span>
                 </div>
                 <div className="operations-hub__legend-item">
-                    <span className="operations-hub__legend-dot" style={{ background: '#f59e0b' }} />
+                    <span className="operations-hub__legend-dot" style={{ background: '#D08700' }} />
                     <span>Medium</span>
                 </div>
                 <div className="operations-hub__legend-item">
-                    <span className="operations-hub__legend-dot" style={{ background: '#ef4444' }} />
+                    <span className="operations-hub__legend-dot" style={{ background: '#C2413A' }} />
                     <span>High Risk</span>
                 </div>
             </div>

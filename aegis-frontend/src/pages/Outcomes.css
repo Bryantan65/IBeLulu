@@ -56,14 +56,14 @@
 .outcomes__table td {
     text-align: left;
     padding: var(--space-3) var(--space-4);
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-divider);
 }
 
 .outcomes__table th {
     font-size: var(--text-sm);
     font-weight: var(--font-semibold);
     color: var(--color-text-secondary);
-    background: var(--color-bg-surface);
+    background: var(--color-surface-2);
 }
 
 .outcomes__playbook-name {
@@ -77,7 +77,7 @@
 }
 
 .outcomes__fail {
-    color: var(--color-danger);
+    color: var(--color-error);
     font-weight: var(--font-semibold);
 }
 
@@ -90,7 +90,7 @@
 .outcomes__rate-bar {
     width: 100px;
     height: 8px;
-    background: var(--color-bg-surface);
+    background: var(--color-n2);
     border-radius: var(--radius-full);
     overflow: hidden;
 }

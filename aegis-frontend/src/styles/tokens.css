@@ -1,38 +1,136 @@
 /* AEGIS Design Tokens */
-/* Color palette based on implementation_plan.md */
+/* Teal-Tinted Dashboard Color Palette */
 
 :root {
-  /* Primary Colors */
-  --color-primary: #0D9488;
-  --color-primary-dark: #0F766E;
-  --color-primary-light: #14B8A6;
-  
-  /* Secondary Colors */
-  --color-secondary: #6366F1;
-  --color-secondary-dark: #4F46E5;
-  --color-secondary-light: #818CF8;
-  
-  /* Background Colors */
-  --color-bg: #0A0F1A;
-  --color-bg-elevated: #111827;
-  --color-bg-surface: #1F2937;
-  
-  /* Text Colors */
-  --color-text-primary: #F9FAFB;
-  --color-text-secondary: #9CA3AF;
-  --color-text-muted: #6B7280;
-  
-  /* Accent Colors */
-  --color-success: #22C55E;
-  --color-warning: #F59E0B;
-  --color-danger: #EF4444;
-  --color-info: #3B82F6;
-  
-  /* Border */
-  --color-border: rgba(255, 255, 255, 0.08);
-  --color-border-focus: #0D9488;
-  
-  /* Spacing Scale (8pt grid) */
+  /* ========================================
+     NEUTRALS (N0-N5, light → dark)
+     ======================================== */
+  --color-n0: #F6F8F9;
+  --color-n1: #EEF3F5;
+  --color-n2: #DDE5E9;
+  --color-n3: #B7C4CC;
+  --color-n4: #5B6B75;
+  --color-n5: #1C2B33;
+
+  /* ========================================
+     PRIMARY SCALE (P0-P5, tint → shade)
+     Deep teal for actions/navigation
+     ======================================== */
+  --color-primary-0: #D6E2E5;
+  --color-primary-1: #B4C4CA;
+  --color-primary-2: #859CA4;
+  --color-primary-3: #1A3F4E;
+  --color-primary-4: #163642;
+  --color-primary-5: #142E39;
+
+  /* ========================================
+     SECONDARY SCALE (S0-S5)
+     Operational green for positive states
+     ======================================== */
+  --color-secondary-0: #E5F1E0;
+  --color-secondary-1: #D1E4C7;
+  --color-secondary-2: #B6D3A6;
+  --color-secondary-3: #77AC59;
+  --color-secondary-4: #618E4A;
+  --color-secondary-5: #4F753D;
+
+  /* ========================================
+     ACCENT SCALE (A0-A3)
+     Gold highlights/badges (use sparingly)
+     ======================================== */
+  --color-accent-0: #F8EDC7;
+  --color-accent-1: #F2DA93;
+  --color-accent-2: #E2AE17;
+  --color-accent-3: #C09214;
+
+  /* ========================================
+     BACKGROUND LAYERS
+     ======================================== */
+  --color-bg: #F6F8F9;
+  --color-surface-1: #FBFDFD;
+  --color-surface-2: #EEF3F5;
+  --color-elevated: #FFFFFF;
+  --color-overlay: #0B171C;
+
+  /* Legacy aliases for compatibility */
+  --color-bg-elevated: var(--color-elevated);
+  --color-bg-surface: var(--color-surface-2);
+
+  /* ========================================
+     BORDERS / DIVIDERS
+     ======================================== */
+  --color-border-subtle: #E3EBEF;
+  --color-border: #CBD7DE;
+  --color-border-strong: #9FB0BA;
+  --color-divider: #E3EBEF;
+
+  /* ========================================
+     TEXT COLORS
+     ======================================== */
+  --color-text: #1C2B33;
+  --color-text-secondary: #3A4A54;
+  --color-text-muted: #667680;
+  --color-text-inverse: #F6F8F9;
+
+  /* Legacy aliases for compatibility */
+  --color-text-primary: var(--color-text);
+
+  /* ========================================
+     SEMANTIC TOKENS (agent-ready)
+     ======================================== */
+  --color-primary: #1A3F4E;
+  --color-primary-hover: #163642;
+  --color-primary-active: #142E39;
+  --color-primary-light: #859CA4;
+  --color-primary-dark: #142E39;
+
+  --color-secondary: #77AC59;
+  --color-secondary-hover: #618E4A;
+  --color-secondary-active: #4F753D;
+  --color-secondary-light: #B6D3A6;
+  --color-secondary-dark: #4F753D;
+
+  --color-accent: #E2AE17;
+
+  /* ========================================
+     STATUS COLORS
+     ======================================== */
+  --color-success: #2F8A5B;
+  --color-success-subtle: #E6F4EE;
+
+  --color-warning: #D08700;
+  --color-warning-subtle: #FFF3D6;
+
+  --color-error: #C2413A;
+  --color-error-subtle: #FCE8E7;
+
+  --color-info: #2B6CB0;
+  --color-info-subtle: #E7F0FB;
+
+  /* Legacy alias */
+  --color-danger: var(--color-error);
+
+  /* ========================================
+     FOCUS + LINKS
+     ======================================== */
+  --color-focus-ring: #3C8FB0;
+  --color-border-focus: #3C8FB0;
+  --color-link: #2B6074;
+  --color-link-hover: #1F5163;
+
+  /* ========================================
+     CHART SERIES (3-6 colors that won't clash)
+     ======================================== */
+  --color-chart-1: #1A3F4E;
+  --color-chart-2: #3C8FB0;
+  --color-chart-3: #77AC59;
+  --color-chart-4: #E2AE17;
+  --color-chart-5: #859CA4;
+  --color-chart-6: #4F753D;
+
+  /* ========================================
+     SPACING SCALE (8pt grid)
+     ======================================== */
   --space-0: 0px;
   --space-1: 4px;
   --space-2: 8px;
@@ -43,19 +141,23 @@
   --space-12: 48px;
   --space-16: 64px;
   --space-24: 96px;
-  
-  /* Border Radius */
+
+  /* ========================================
+     BORDER RADIUS
+     ======================================== */
   --radius-none: 0px;
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
   --radius-full: 9999px;
-  
-  /* Typography */
+
+  /* ========================================
+     TYPOGRAPHY
+     ======================================== */
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
-  
+
   --text-xs: 12px;
   --text-sm: 13px;
   --text-base: 14px;
@@ -63,26 +165,32 @@
   --text-xl: 18px;
   --text-2xl: 24px;
   --text-3xl: 32px;
-  
+
   --font-normal: 400;
   --font-medium: 500;
   --font-semibold: 600;
   --font-bold: 700;
-  
-  /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
-  --shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  
-  /* Animation */
+
+  /* ========================================
+     SHADOWS (adjusted for light theme)
+     ======================================== */
+  --shadow-sm: 0 1px 2px rgba(28, 43, 51, 0.06);
+  --shadow-md: 0 4px 6px -1px rgba(28, 43, 51, 0.08), 0 2px 4px -2px rgba(28, 43, 51, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(28, 43, 51, 0.1);
+  --shadow-modal: 0 25px 50px -12px rgba(11, 23, 28, 0.25);
+
+  /* ========================================
+     ANIMATION
+     ======================================== */
   --duration-fast: 150ms;
   --duration-normal: 300ms;
   --duration-slow: 500ms;
   --easing-default: cubic-bezier(0.4, 0, 0.2, 1);
   --easing-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
-  
-  /* Z-Index Scale */
+
+  /* ========================================
+     Z-INDEX SCALE
+     ======================================== */
   --z-base: 0;
   --z-dropdown: 100;
   --z-sticky: 200;

@@ -6,8 +6,8 @@
 
 /* 3D Hub */
 .dashboard__hub {
-    background: var(--color-bg-elevated);
-    border: 1px solid var(--color-border);
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-lg);
     height: 400px;
     overflow: hidden;
@@ -47,8 +47,8 @@
 }
 
 .dashboard__feed {
-    background: var(--color-bg-elevated);
-    border: 1px solid var(--color-border);
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-lg);
     padding: var(--space-4);
 }
@@ -56,7 +56,7 @@
 .dashboard__feed h3 {
     font-size: var(--text-lg);
     margin-bottom: var(--space-4);
-    color: var(--color-text-primary);
+    color: var(--color-text);
 }
 
 .dashboard__feed-list {
@@ -71,7 +71,7 @@
     align-items: center;
     gap: var(--space-3);
     padding: var(--space-2) 0;
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-divider);
 }
 
 .activity-item:last-child {
@@ -99,7 +99,7 @@
 /* Agent Item */
 .agent-item {
     padding: var(--space-3);
-    background: var(--color-bg-surface);
+    background: var(--color-surface-2);
     border-radius: var(--radius-md);
 }
 
@@ -120,7 +120,7 @@
 .agent-item__action {
     font-size: var(--text-xs);
     color: var(--color-text-muted);
-    background: var(--color-bg-elevated);
+    background: var(--color-surface-1);
     padding: 2px 8px;
     border-radius: var(--radius-sm);
 }

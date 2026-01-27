@@ -14,7 +14,7 @@
     position: absolute;
     top: var(--space-4);
     left: var(--space-4);
-    background: var(--color-bg-surface);
+    background: var(--color-elevated);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     padding: var(--space-2) var(--space-3);
@@ -23,6 +23,7 @@
     gap: var(--space-1);
     pointer-events: none;
     animation: fadeIn 0.15s ease-out;
+    box-shadow: var(--shadow-md);
 }
 
 .operations-hub__tooltip-type {
@@ -35,7 +36,7 @@
 .operations-hub__tooltip-name {
     font-size: var(--text-base);
     font-weight: var(--font-semibold);
-    color: var(--color-text-primary);
+    color: var(--color-text);
 }
 
 /* Legend */
@@ -43,13 +44,14 @@
     position: absolute;
     bottom: var(--space-4);
     right: var(--space-4);
-    background: rgba(17, 24, 39, 0.9);
+    background: var(--color-elevated);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     padding: var(--space-3);
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
+    box-shadow: var(--shadow-md);
 }
 
 .operations-hub__legend-item {

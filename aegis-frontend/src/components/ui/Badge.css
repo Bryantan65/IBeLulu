@@ -18,30 +18,35 @@
     padding: 4px 10px;
 }
 
-/* Variants */
+/* Variants - using subtle backgrounds with main colors */
 .badge--success {
-    background: rgba(34, 197, 94, 0.15);
+    background: var(--color-success-subtle);
     color: var(--color-success);
 }
 
 .badge--warning {
-    background: rgba(245, 158, 11, 0.15);
+    background: var(--color-warning-subtle);
     color: var(--color-warning);
 }
 
 .badge--danger {
-    background: rgba(239, 68, 68, 0.15);
-    color: var(--color-danger);
+    background: var(--color-error-subtle);
+    color: var(--color-error);
 }
 
 .badge--info {
-    background: rgba(59, 130, 246, 0.15);
+    background: var(--color-info-subtle);
     color: var(--color-info);
 }
 
 .badge--neutral {
-    background: var(--color-bg-surface);
-    color: var(--color-text-secondary);
+    background: var(--color-primary-0);
+    color: var(--color-primary);
+}
+
+.badge--highlight {
+    background: var(--color-accent-0);
+    color: var(--color-accent-3);
 }
 
 /* Dot */

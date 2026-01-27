@@ -16,7 +16,7 @@
     gap: var(--space-3);
     font-size: var(--text-lg);
     font-weight: var(--font-semibold);
-    color: var(--color-text-primary);
+    color: var(--color-text);
 }
 
 .runsheet__actions {
@@ -38,8 +38,8 @@
 }
 
 .runsheet__team {
-    background: var(--color-bg-elevated);
-    border: 1px solid var(--color-border);
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-lg);
     overflow: hidden;
 }
@@ -49,8 +49,8 @@
     justify-content: space-between;
     align-items: center;
     padding: var(--space-4);
-    background: var(--color-bg-surface);
-    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface-2);
+    border-bottom: 1px solid var(--color-divider);
 }
 
 .runsheet__team-header h3 {
@@ -61,7 +61,7 @@
 /* Windows */
 .runsheet__window {
     padding: var(--space-4);
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-divider);
 }
 
 .runsheet__window:last-child {
@@ -105,7 +105,7 @@
 
 .runsheet__task-zone {
     font-size: var(--text-sm);
-    color: var(--color-text-primary);
+    color: var(--color-text);
 }
 
 .runsheet__task-cluster {
@@ -134,5 +134,5 @@
 
 .runsheet__summary-item strong {
     font-size: var(--text-xl);
-    color: var(--color-text-primary);
+    color: var(--color-text);
 }
