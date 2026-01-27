@@ -38,20 +38,20 @@ const SingaporeMap = forwardRef<SingaporeMapRef, SingaporeMapProps>(
     ({ scene, isDark, visible = true, scale = SG_SCALE }, ref) => {
         const groupRef = useRef<THREE.Group | null>(null)
         const landMaterialRef = useRef<THREE.MeshStandardMaterial | null>(null)
-        const waterMaterialRef = useRef<THREE.MeshStandardMaterial | null>(null)
+
         const { loadGeoJSON, createExtrudedGeometry, calculateBounds } = useGeoJSON()
 
         useImperativeHandle(ref, () => ({
-            group: groupRef.current,
+            get group() {
+                return groupRef.current
+            },
             updateTheme: (dark: boolean) => {
                 const colors = dark ? THEME_COLORS.dark : THEME_COLORS.light
                 if (landMaterialRef.current) {
                     landMaterialRef.current.color.setHex(colors.land)
                     landMaterialRef.current.emissive.setHex(colors.landEdge)
                 }
-                if (waterMaterialRef.current) {
-                    waterMaterialRef.current.color.setHex(colors.water)
-                }
+
             },
             setVisible: (v: boolean) => {
                 if (groupRef.current) {
@@ -60,12 +60,21 @@ const SingaporeMap = forwardRef<SingaporeMapRef, SingaporeMapProps>(
             },
         }))
 
+        // Handle visibility changes separately to avoid recreating the group
+        useEffect(() => {
+            if (groupRef.current) {
+                groupRef.current.visible = visible
+            }
+        }, [visible])
+
         useEffect(() => {
             const colors = isDark ? THEME_COLORS.dark : THEME_COLORS.light
 
             // Create group
             const group = new THREE.Group()
             group.name = 'singaporeMap'
+            // Initialize with current visibility, but updates are handled by the effect above
+            // We default to the prop value, but subsequent updates won't recreate the group
             group.visible = visible
             groupRef.current = group
 
@@ -111,38 +120,7 @@ const SingaporeMap = forwardRef<SingaporeMapRef, SingaporeMapProps>(
                     group.add(mesh)
                 })
 
-                // Water plane
-                const waterSize = Math.max(bounds.width, bounds.height) * scale * 1.5
-                const waterGeometry = new THREE.PlaneGeometry(waterSize, waterSize, 32, 32)
-                const waterMaterial = new THREE.MeshStandardMaterial({
-                    color: colors.water,
-                    transparent: true,
-                    opacity: 0.9,
-                    metalness: 0.3,
-                    roughness: 0.6,
-                })
-                waterMaterialRef.current = waterMaterial
 
-                const water = new THREE.Mesh(waterGeometry, waterMaterial)
-                water.rotation.x = -Math.PI / 2
-                water.position.y = -0.01
-                water.userData = { type: 'water' }
-                water.receiveShadow = true
-                group.add(water)
-
-                // Add grid overlay on water
-                const gridSize = waterSize
-                const gridDivisions = 20
-                const gridHelper = new THREE.GridHelper(
-                    gridSize,
-                    gridDivisions,
-                    colors.waterEdge,
-                    colors.waterEdge
-                )
-                gridHelper.position.y = 0.001
-                gridHelper.material.opacity = 0.2
-                gridHelper.material.transparent = true
-                group.add(gridHelper)
             }
 
             loadMap()
@@ -160,7 +138,7 @@ const SingaporeMap = forwardRef<SingaporeMapRef, SingaporeMapProps>(
                     }
                 })
             }
-        }, [scene, isDark, visible, scale, loadGeoJSON, createExtrudedGeometry, calculateBounds])
+        }, [scene, isDark, scale, loadGeoJSON, createExtrudedGeometry, calculateBounds])
 
         return null
     }

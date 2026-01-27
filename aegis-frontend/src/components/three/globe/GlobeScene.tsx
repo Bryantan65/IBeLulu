@@ -85,21 +85,10 @@ const GlobeScene = forwardRef<GlobeSceneRef, GlobeSceneProps>(
             atmosphereRef.current = atmosphere
             group.add(atmosphere)
 
-            // Add subtle ring around equator
-            const ringGeometry = new THREE.RingGeometry(radius * 1.02, radius * 1.04, 64)
-            const ringMaterial = new THREE.MeshBasicMaterial({
-                color: colors.grid,
-                transparent: true,
-                opacity: 0.2,
-                side: THREE.DoubleSide,
-            })
-            const ring = new THREE.Mesh(ringGeometry, ringMaterial)
-            ring.rotation.x = Math.PI / 2
-            ring.name = 'equatorRing'
-            group.add(ring)
 
             // Add to scene
             scene.add(group)
+
 
             // Animation for auto-rotation
             let animationId: number
@@ -119,8 +108,6 @@ const GlobeScene = forwardRef<GlobeSceneRef, GlobeSceneProps>(
                 earthMaterial.dispose()
                 atmosphereGeometry.dispose()
                 atmosphereMaterial.dispose()
-                ringGeometry.dispose()
-                ringMaterial.dispose()
             }
         }, [scene, isDark, radius, autoRotate, rotationSpeed])
 
