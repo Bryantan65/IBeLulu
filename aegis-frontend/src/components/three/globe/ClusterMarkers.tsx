@@ -14,6 +14,7 @@ export interface ClusterData {
 }
 
 export interface ClusterMarkersRef {
+    group: THREE.Group | null
     markers: Map<string, THREE.Mesh>
     highlightCluster: (id: string | null) => void
     updateClusters: (clusters: ClusterData[]) => void
@@ -63,6 +64,9 @@ const ClusterMarkers = forwardRef<ClusterMarkersRef, ClusterMarkersProps>(
 
         // Expose methods to parent
         useImperativeHandle(ref, () => ({
+            get group() {
+                return groupRef.current
+            },
             markers: markersRef.current,
             highlightCluster: (id: string | null) => {
                 // Reset previous highlight

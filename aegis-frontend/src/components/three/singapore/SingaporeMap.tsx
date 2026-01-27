@@ -1,7 +1,7 @@
-// Singapore Map - Extruded GeoJSON land mesh with water plane
+
+// Singapore Map - Flat Satellite/Digital Twin View
 import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import * as THREE from 'three'
-import { useGeoJSON } from '../hooks/useGeoJSON'
 
 export interface SingaporeMapRef {
     group: THREE.Group | null
@@ -13,33 +13,24 @@ interface SingaporeMapProps {
     scene: THREE.Scene
     isDark: boolean
     visible?: boolean
-    scale?: number
 }
 
 const THEME_COLORS = {
     light: {
-        land: 0x1A3F4E,
-        landEdge: 0x163642,
-        water: 0xB8D4E3,
-        waterEdge: 0x8FBCD5,
+        ground: 0xE3EBEF,
+        grid: 0x3C8FB0,
     },
     dark: {
-        land: 0x2B5A6D,
-        landEdge: 0x3C8FB0,
-        water: 0x0B171C,
-        waterEdge: 0x1A2D38,
+        ground: 0x0B171C,
+        grid: 0x1A3F4E,
     },
 }
 
-// Singapore scale factor for display
-const SG_SCALE = 50
-
 const SingaporeMap = forwardRef<SingaporeMapRef, SingaporeMapProps>(
-    ({ scene, isDark, visible = true, scale = SG_SCALE }, ref) => {
+    ({ scene, isDark, visible = false }, ref) => {
         const groupRef = useRef<THREE.Group | null>(null)
-        const landMaterialRef = useRef<THREE.MeshStandardMaterial | null>(null)
-
-        const { loadGeoJSON, createExtrudedGeometry, calculateBounds } = useGeoJSON()
+        const planeMaterialRef = useRef<THREE.MeshStandardMaterial | null>(null)
+        const gridHelperRef = useRef<THREE.GridHelper | null>(null)
 
         useImperativeHandle(ref, () => ({
             get group() {
@@ -47,11 +38,18 @@ const SingaporeMap = forwardRef<SingaporeMapRef, SingaporeMapProps>(
             },
             updateTheme: (dark: boolean) => {
                 const colors = dark ? THEME_COLORS.dark : THEME_COLORS.light
-                if (landMaterialRef.current) {
-                    landMaterialRef.current.color.setHex(colors.land)
-                    landMaterialRef.current.emissive.setHex(colors.landEdge)
+                if (planeMaterialRef.current) {
+                    planeMaterialRef.current.color.setHex(colors.ground)
                 }
+                if (gridHelperRef.current) {
 
+                    // GridHelper colors are attributes, simpler to recreate or just update material color if possible
+                    // For standard GridHelper, updating colors is tricky without recreation,
+                    // so we'll just update the material color which affects lines
+                    if (gridHelperRef.current.material instanceof THREE.LineBasicMaterial) {
+                        gridHelperRef.current.material.color.setHex(colors.grid)
+                    }
+                }
             },
             setVisible: (v: boolean) => {
                 if (groupRef.current) {
@@ -60,7 +58,7 @@ const SingaporeMap = forwardRef<SingaporeMapRef, SingaporeMapProps>(
             },
         }))
 
-        // Handle visibility changes separately to avoid recreating the group
+        // Handle visibility changes (fallback / initial sync)
         useEffect(() => {
             if (groupRef.current) {
                 groupRef.current.visible = visible
@@ -70,75 +68,58 @@ const SingaporeMap = forwardRef<SingaporeMapRef, SingaporeMapProps>(
         useEffect(() => {
             const colors = isDark ? THEME_COLORS.dark : THEME_COLORS.light
 
-            // Create group
             const group = new THREE.Group()
             group.name = 'singaporeMap'
-            // Initialize with current visibility, but updates are handled by the effect above
-            // We default to the prop value, but subsequent updates won't recreate the group
             group.visible = visible
             groupRef.current = group
 
-            // Load and process GeoJSON
-            const loadMap = async () => {
-                const data = await loadGeoJSON('/data/singapore.geojson')
-                if (!data) return
+            // 1. Base Plane (Satellite/Map Placeholder)
+            // Singapore is roughly 50km wide. We'll map this to 50 world units for simplicity.
+            const width = 50
+            const height = 30 // Aspect ratio roughly 1.6
+            const geometry = new THREE.PlaneGeometry(width, height, 64, 64)
 
-                // Calculate bounds for centering
-                const bounds = calculateBounds(data)
-                const centerOffset = {
-                    x: -bounds.centerX,
-                    y: -bounds.centerY,
-                }
+            // Placeholder for Satellite Texture
+            // In a real app, load texture here: const texture = new THREE.TextureLoader().load('/singapore_sat.jpg')
+            const material = new THREE.MeshStandardMaterial({
+                color: colors.ground,
+                roughness: 0.8,
+                metalness: 0.2,
+                side: THREE.DoubleSide,
+            })
+            planeMaterialRef.current = material
 
-                // Create extruded land geometry
-                const geometries = createExtrudedGeometry(data, {
-                    depth: 0.02,
-                    bevelEnabled: true,
-                    bevelThickness: 0.005,
-                    bevelSize: 0.003,
-                    scale: scale,
-                    centerOffset,
-                })
+            const plane = new THREE.Mesh(geometry, material)
+            plane.rotation.x = -Math.PI / 2
+            plane.receiveShadow = true
+            group.add(plane)
 
-                // Land material
-                const landMaterial = new THREE.MeshStandardMaterial({
-                    color: colors.land,
-                    emissive: colors.landEdge,
-                    emissiveIntensity: 0.1,
-                    metalness: 0.2,
-                    roughness: 0.8,
-                    flatShading: false,
-                })
-                landMaterialRef.current = landMaterial
+            // 2. Terrain Grid (Digital Twin aesthetic)
+            const gridHelper = new THREE.GridHelper(60, 60, colors.grid, colors.grid)
+            gridHelper.position.y = 0.05 // Slightly above plane
+            gridHelper.material.transparent = true
+            gridHelper.material.opacity = 0.3
+            gridHelperRef.current = gridHelper
+            group.add(gridHelper)
 
-                // Add land meshes
-                geometries.forEach((geometry) => {
-                    const mesh = new THREE.Mesh(geometry, landMaterial)
-                    mesh.userData = { type: 'land' }
-                    mesh.castShadow = true
-                    mesh.receiveShadow = true
-                    group.add(mesh)
-                })
+            // 3. Optional: Add a few "Buildings" as extrusion placeholders
+            // Central Business District
+            const cbdGeo = new THREE.BoxGeometry(2, 4, 2)
+            const cbdMat = new THREE.MeshStandardMaterial({ color: 0x4FC3F7, transparent: true, opacity: 0.7 })
+            const cbd = new THREE.Mesh(cbdGeo, cbdMat)
+            cbd.position.set(0, 2, 2) // Roughly center-south
+            group.add(cbd)
 
-
-            }
-
-            loadMap()
             scene.add(group)
 
-            // Cleanup
             return () => {
                 scene.remove(group)
-                group.traverse((child) => {
-                    if (child instanceof THREE.Mesh) {
-                        child.geometry.dispose()
-                        if (child.material instanceof THREE.Material) {
-                            child.material.dispose()
-                        }
-                    }
-                })
+                geometry.dispose()
+                material.dispose()
+                cbdGeo.dispose()
+                cbdMat.dispose()
             }
-        }, [scene, isDark, scale, loadGeoJSON, createExtrudedGeometry, calculateBounds])
+        }, [scene, isDark])
 
         return null
     }

@@ -9,7 +9,7 @@ import ClusterMarkers, { ClusterMarkersRef, ClusterData } from './globe/ClusterM
 import SingaporeMap, { SingaporeMapRef } from './singapore/SingaporeMap'
 import SceneOverlay, { ViewMode } from './ui/SceneOverlay'
 import { useGlobeCamera } from './hooks/useGlobeCamera'
-import { useViewTransition } from './hooks/useViewTransition'
+import { useCameraTransition } from './hooks/useCameraTransition'
 import './OperationsHub.css'
 
 // Theme colors for the 3D scene
@@ -61,28 +61,58 @@ export default function OperationsHub() {
 
     // Camera and transition hooks
     const { resetView } = useGlobeCamera(cameraRef.current, controlsRef.current)
-    const { transition } = useViewTransition({
-        onTransitionStart: () => setIsTransitioning(true),
-        onTransitionComplete: (mode) => {
-            setViewMode(mode)
-            setIsTransitioning(false)
-        },
-    })
+    const { transitionToGlobal, transitionToSingapore } = useCameraTransition()
 
     // Handle view mode change
     const handleModeChange = useCallback(
-        async (mode: ViewMode) => {
-            if (isTransitioning) return
+        (mode: ViewMode) => {
+            if (isTransitioning || !cameraRef.current || !controlsRef.current) return
 
-            await transition(mode, {
-                duration: 1500,
-                globeGroup: globeRef.current?.group,
-                singaporeGroup: singaporeMapRef.current?.group,
-                camera: cameraRef.current,
-                controls: controlsRef.current,
-            })
+            setIsTransitioning(true)
+
+            if (mode === 'singapore') {
+                transitionToSingapore({
+                    camera: cameraRef.current,
+                    controls: controlsRef.current,
+                    globeGroup: globeRef.current?.group,
+                    singaporeGroup: singaporeMapRef.current?.group,
+                    markersGroup: clusterMarkersRef.current?.group,
+                    onTransitionComplete: () => {
+                        setViewMode('singapore')
+                        setIsTransitioning(false)
+                        // Apply controls constraints for Singapore
+                        if (controlsRef.current) {
+                            controlsRef.current.enablePan = true
+                            controlsRef.current.minDistance = 2
+                            controlsRef.current.maxDistance = 60
+                            controlsRef.current.maxPolarAngle = Math.PI / 2.5
+                            controlsRef.current.autoRotate = false
+                        }
+                    }
+                })
+            } else {
+                transitionToGlobal({
+                    camera: cameraRef.current,
+                    controls: controlsRef.current,
+                    globeGroup: globeRef.current?.group,
+                    singaporeGroup: singaporeMapRef.current?.group,
+                    markersGroup: clusterMarkersRef.current?.group,
+                    onTransitionComplete: () => {
+                        setViewMode('global')
+                        setIsTransitioning(false)
+                        // Reset controls for Global
+                        if (controlsRef.current) {
+                            controlsRef.current.enablePan = false
+                            controlsRef.current.minDistance = 8
+                            controlsRef.current.maxDistance = 30
+                            controlsRef.current.maxPolarAngle = Math.PI / 2
+                            controlsRef.current.autoRotate = true
+                        }
+                    }
+                })
+            }
         },
-        [isTransitioning, transition]
+        [isTransitioning, setIsTransitioning, setViewMode, transitionToSingapore, transitionToGlobal]
     )
 
     // Handle reset view
@@ -239,7 +269,7 @@ export default function OperationsHub() {
                         ref={singaporeMapRef}
                         scene={sceneRef.current}
                         isDark={isDark}
-                        visible={viewMode === 'singapore'}
+                        visible={viewMode === 'singapore' || isTransitioning}
                     />
                 </>
             )}

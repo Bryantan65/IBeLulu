@@ -51,7 +51,6 @@ const GlobeScene = forwardRef<GlobeSceneRef, GlobeSceneProps>(
                 if (earthMaterialRef.current?.uniforms) {
                     earthMaterialRef.current.uniforms.landColor?.value?.setHex(colors.land)
                     earthMaterialRef.current.uniforms.oceanColor?.value?.setHex(colors.ocean)
-                    earthMaterialRef.current.uniforms.gridColor?.value?.setHex(colors.grid)
                 }
                 if (atmosphereMaterialRef.current?.uniforms) {
                     atmosphereMaterialRef.current.uniforms.glowColor?.value?.setHex(colors.atmosphere)
@@ -68,7 +67,7 @@ const GlobeScene = forwardRef<GlobeSceneRef, GlobeSceneProps>(
 
             // Globe sphere
             const globeGeometry = new THREE.SphereGeometry(radius, 64, 64)
-            const earthMaterial = createEarthMaterial(colors.land, colors.ocean, colors.grid)
+            const earthMaterial = createEarthMaterial(colors.land, colors.ocean)
             earthMaterialRef.current = earthMaterial
             const globe = new THREE.Mesh(globeGeometry, earthMaterial)
             globe.name = 'globe'
