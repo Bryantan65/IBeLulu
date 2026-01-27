@@ -117,3 +117,27 @@
 .review-queue__empty p {
     margin-top: var(--space-2);
 }
+
+.review-queue__loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    color: var(--color-text-muted);
+}
+
+.spinner {
+    animation: spin 1s linear infinite;
+    margin-bottom: var(--space-2);
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}

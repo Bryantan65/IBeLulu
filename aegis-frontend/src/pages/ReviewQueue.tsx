@@ -1,94 +1,168 @@
+import { useState, useEffect } from 'react'
 import { Button, Badge, Card } from '../components/ui'
-import { Check, X, Edit, AlertCircle, Shield } from 'lucide-react'
+import { Check, X, AlertCircle, Loader } from 'lucide-react'
 import './ReviewQueue.css'
 
-// Mock review items
-const mockReviewItems = [
-    {
-        id: 'RV-001',
-        clusterId: 'CL-001',
-        category: 'Overflow',
-        zone: 'Tampines East',
-        severity: 4,
-        confidence: 0.58,
-        suggestedPlaybook: 'bulky_removal',
-        reason: 'Multiple large items reported near bin clusters. Evidence of repeated overflow events.',
-        fairnessNote: 'Silent Zone Boost Applied (+15 priority)',
-        requiresReview: 'LOW_CONFIDENCE',
-    },
-    {
-        id: 'RV-002',
-        clusterId: 'CL-003',
-        category: 'Smell',
-        zone: 'Pasir Ris',
-        severity: 5,
-        confidence: 0.91,
-        suggestedPlaybook: 'bin_washdown',
-        reason: 'Strong odor complaints from multiple residents. Likely decomposing waste.',
-        fairnessNote: null,
-        requiresReview: 'HIGH_SEVERITY',
-    },
-]
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+interface Cluster {
+    id: string
+    category: string
+    severity_score: number
+    state: string
+    requires_human_review: boolean
+    assigned_playbook: string | null
+    priority_score: number
+    complaint_count?: number
+}
 
 export default function ReviewQueue() {
+    const [clusters, setClusters] = useState<Cluster[]>([])
+    const [loading, setLoading] = useState(true)
+    const [reviewing, setReviewing] = useState<string | null>(null)
+
+    // Fetch pending clusters
+    useEffect(() => {
+        fetchPendingClusters()
+    }, [])
+
+    const fetchPendingClusters = async () => {
+        try {
+            setLoading(true)
+            const response = await fetch(
+                `${SUPABASE_URL}/functions/v1/list-pending-clusters`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            )
+
+            if (!response.ok) {
+                throw new Error('Failed to fetch clusters')
+            }
+
+            const data = await response.json()
+            setClusters(data.clusters || [])
+        } catch (error) {
+            console.error('Error fetching clusters:', error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleReview = async (clusterId: string, action: 'approve' | 'defer') => {
+        try {
+            setReviewing(clusterId)
+
+            const response = await fetch(
+                `${SUPABASE_URL}/functions/v1/review-cluster`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        cluster_id: clusterId,
+                        action: action,
+                        reviewer_notes: action === 'approve' ? 'Approved via UI' : 'Deferred for later review'
+                    })
+                }
+            )
+
+            if (!response.ok) {
+                throw new Error('Failed to review cluster')
+            }
+
+            // Refresh the list
+            await fetchPendingClusters()
+        } catch (error) {
+            console.error('Error reviewing cluster:', error)
+            alert('Failed to review cluster. Please try again.')
+        } finally {
+            setReviewing(null)
+        }
+    }
+
+    if (loading) {
+        return (
+            <div className="review-queue">
+                <div className="review-queue__loading">
+                    <Loader size={48} className="spinner" />
+                    <p>Loading pending reviews...</p>
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="review-queue">
             <div className="review-queue__header">
-                <span className="review-queue__count">{mockReviewItems.length} items pending review</span>
+                <span className="review-queue__count">
+                    {clusters.length} item{clusters.length !== 1 ? 's' : ''} pending review
+                </span>
+                <Button variant="ghost" onClick={fetchPendingClusters}>
+                    Refresh
+                </Button>
             </div>
 
             <div className="review-queue__items">
-                {mockReviewItems.map((item) => (
-                    <Card key={item.id} padding="lg" className="review-card">
+                {clusters.map((cluster) => (
+                    <Card key={cluster.id} padding="lg" className="review-card">
                         <div className="review-card__header">
                             <div className="review-card__title">
-                                <span className="review-card__cluster-id">{item.clusterId}</span>
-                                <Badge variant="neutral" size="sm">{item.category}</Badge>
-                                <Badge variant={item.severity >= 4 ? 'danger' : 'warning'} size="sm">
-                                    Severity {item.severity}
+                                <span className="review-card__cluster-id">{cluster.id.substring(0, 8)}</span>
+                                <Badge variant="neutral" size="sm">{cluster.category}</Badge>
+                                <Badge
+                                    variant={cluster.severity_score >= 4 ? 'danger' : 'warning'}
+                                    size="sm"
+                                >
+                                    Severity {cluster.severity_score}
                                 </Badge>
                             </div>
-                            <Badge
-                                variant={item.requiresReview === 'LOW_CONFIDENCE' ? 'warning' : 'danger'}
-                                size="sm"
-                                dot
-                            >
-                                {item.requiresReview === 'LOW_CONFIDENCE' ? 'Low Confidence' : 'High Severity'}
-                            </Badge>
+                            {cluster.requires_human_review && (
+                                <Badge variant="warning" size="sm" dot>
+                                    Requires Review
+                                </Badge>
+                            )}
                         </div>
 
                         <div className="review-card__meta">
-                            <span>Zone: {item.zone}</span>
-                            <span>Confidence: {Math.round(item.confidence * 100)}%</span>
+                            <span>State: {cluster.state}</span>
+                            <span>Priority: {cluster.priority_score}</span>
+                            {cluster.complaint_count && (
+                                <span>{cluster.complaint_count} complaints</span>
+                            )}
                         </div>
 
-                        <div className="review-card__section">
-                            <h4>AI Suggests</h4>
-                            <div className="review-card__playbook">
-                                <code>{item.suggestedPlaybook}</code>
-                            </div>
-                        </div>
-
-                        <div className="review-card__section">
-                            <h4>Reason</h4>
-                            <p>{item.reason}</p>
-                        </div>
-
-                        {item.fairnessNote && (
-                            <div className="review-card__fairness">
-                                <Shield size={14} />
-                                <span>{item.fairnessNote}</span>
+                        {cluster.assigned_playbook && (
+                            <div className="review-card__section">
+                                <h4>AI Suggests</h4>
+                                <div className="review-card__playbook">
+                                    <code>{cluster.assigned_playbook}</code>
+                                </div>
                             </div>
                         )}
 
                         <div className="review-card__actions">
-                            <Button variant="primary" icon={<Check size={16} />}>
-                                Approve
+                            <Button
+                                variant="primary"
+                                icon={<Check size={16} />}
+                                onClick={() => handleReview(cluster.id, 'approve')}
+                                disabled={reviewing === cluster.id}
+                            >
+                                {reviewing === cluster.id ? 'Reviewing...' : 'Approve'}
                             </Button>
-                            <Button variant="secondary" icon={<Edit size={16} />}>
-                                Override Playbook
-                            </Button>
-                            <Button variant="ghost" icon={<X size={16} />}>
+                            <Button
+                                variant="ghost"
+                                icon={<X size={16} />}
+                                onClick={() => handleReview(cluster.id, 'defer')}
+                                disabled={reviewing === cluster.id}
+                            >
                                 Defer
                             </Button>
                         </div>
@@ -96,7 +170,7 @@ export default function ReviewQueue() {
                 ))}
             </div>
 
-            {mockReviewItems.length === 0 && (
+            {clusters.length === 0 && (
                 <div className="review-queue__empty">
                     <AlertCircle size={48} />
                     <h3>All caught up!</h3>

@@ -36,7 +36,7 @@ let currentToken: string | null = null;
 async function fetchToken(): Promise<string> {
   try {
     console.log('🔑 Fetching JWT token from Supabase Edge Function...');
-    
+
     const response = await fetch(TOKEN_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -49,18 +49,18 @@ async function fetchToken(): Promise<string> {
         email: 'demo@example.com'
       })
     });
-    
+
     if (!response.ok) {
       throw new Error('Failed to fetch token: ' + response.status);
     }
-    
+
     const data = await response.json();
     currentToken = data.token;
-    
+
     console.log('✅ Token received for user:', data.user_id);
     console.log('⏰ Token expires at:', new Date(data.expires_at * 1000).toLocaleString());
-    
-    return currentToken;
+
+    return currentToken || '';
   } catch (error) {
     console.error('❌ Failed to get token:', error);
     console.error('Make sure you have deployed the watson-token Edge Function');
@@ -105,43 +105,43 @@ export async function initWatsonChat(): Promise<void> {
   try {
     // Fetch initial token BEFORE configuring
     await fetchToken();
-    
+
     // Configure wxO with token at ROOT level (CRITICAL!)
     window.wxOConfiguration = {
       orchestrationID: "20260126-1305-0189-1099-b2cf449c589c_20260126-1332-1571-30ef-acf1a3847d97",
       hostURL: "https://ap-southeast-1.dl.watson-orchestrate.ibm.com",
       rootElementID: "watson-chat",
-      
+
       // Token at ROOT level (NOT inside chatOptions)
       token: currentToken,
-      
+
       chatOptions: {
-        agentId: "addd6d7a-97ab-44db-8774-30fb15f7a052", 
+        agentId: "addd6d7a-97ab-44db-8774-30fb15f7a052",
         agentEnvironmentId: "e1af0ec2-0a5c-490a-9ae1-5e3327eb3d0c"
       },
-      
+
       // Token refresh handler (REQUIRED)
-      onAuthTokenNeeded: async function() {
+      onAuthTokenNeeded: async function () {
         console.log('🔄 Token refresh requested by Watson');
         return await fetchToken();
       }
     };
-    
+
     // Load wxoLoader script
     const script = document.createElement('script');
     script.src = window.wxOConfiguration.hostURL + '/wxochat/wxoLoader.js?embed=true';
-    
+
     script.addEventListener('load', function () {
       console.log('✅ wxoLoader loaded successfully');
       window.wxoLoader.init();
     });
-    
-    script.addEventListener('error', function(error) {
+
+    script.addEventListener('error', function (error) {
       console.error('❌ Failed to load wxoLoader:', error);
     });
-    
+
     document.head.appendChild(script);
-    
+
   } catch (error) {
     console.error('❌ Failed to initialize Watson chat:', error);
     const chatDiv = document.getElementById('watson-chat');

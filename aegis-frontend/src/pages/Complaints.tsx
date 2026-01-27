@@ -4,14 +4,20 @@ import { Badge, Card } from '../components/ui'
 import { Search, Filter, ArrowUpDown, Send, User, Bot, Loader2 } from 'lucide-react'
 import './Complaints.css'
 
-// Mock complaint data
-const mockComplaints = [
-    { id: 'C001', category: 'Litter', severity: 3, urgency: 'TODAY', confidence: 0.89, status: 'LINKED', location: 'Tampines St 21', time: '10m ago' },
-    { id: 'C002', category: 'Overflow', severity: 4, urgency: 'TODAY', confidence: 0.72, status: 'LINKED', location: 'Bedok North Ave 3', time: '25m ago' },
-    { id: 'C003', category: 'Smell', severity: 2, urgency: '48H', confidence: 0.94, status: 'RECEIVED', location: 'Simei St 4', time: '1h ago' },
-    { id: 'C004', category: 'Bulky Items', severity: 3, urgency: 'WEEK', confidence: 0.81, status: 'LINKED', location: 'Pasir Ris Dr 6', time: '2h ago' },
-    { id: 'C005', category: 'Overflow', severity: 5, urgency: 'TODAY', confidence: 0.56, status: 'RECEIVED', location: 'Tampines Ave 9', time: '3h ago' },
-]
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+interface Complaint {
+    id: string
+    text: string
+    location: string
+    category: string
+    severity: number
+    urgency: string
+    confidence: number
+    state: string
+    created_at: string
+}
 
 export default function Complaints() {
     const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -116,10 +122,13 @@ export default function Complaints() {
                     <Search size={18} />
                     <input type="text" placeholder="Search complaints..." />
                 </div>
-                <button className="complaints__filter-btn">
-                    <Filter size={16} />
-                    <span>Filter</span>
-                </button>
+                <Button
+                    variant="primary"
+                    icon={<Plus size={16} />}
+                    onClick={() => setShowForm(true)}
+                >
+                    New Complaint
+                </Button>
             </div>
 
             {/* Desktop/Tablet Table View */}
@@ -128,38 +137,38 @@ export default function Complaints() {
                     <thead>
                         <tr>
                             <th>ID <ArrowUpDown size={14} /></th>
+                            <th>Description</th>
+                            <th>Location</th>
                             <th>Category</th>
                             <th>Severity</th>
                             <th>Urgency</th>
-                            <th>Confidence</th>
                             <th>Status</th>
-                            <th>Location</th>
                             <th>Time</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {mockComplaints.map((complaint) => (
+                        {complaints.map((complaint) => (
                             <tr key={complaint.id}>
-                                <td className="complaints__id">{complaint.id}</td>
+                                <td className="complaints__id">{complaint.id.substring(0, 8)}</td>
+                                <td className="complaints__text">{complaint.text}</td>
+                                <td className="complaints__location">
+                                    <MapPin size={12} /> {complaint.location}
+                                </td>
                                 <td>{complaint.category}</td>
                                 <td>
                                     <SeverityBadge level={complaint.severity} />
                                 </td>
                                 <td>
-                                    <Badge variant={complaint.urgency === 'TODAY' ? 'danger' : complaint.urgency === '48H' ? 'warning' : 'neutral'} size="sm">
-                                        {complaint.urgency}
+                                    <Badge variant={(complaint.urgency || '48h') === 'today' ? 'danger' : (complaint.urgency || '48h') === '48h' ? 'warning' : 'neutral'} size="sm">
+                                        {(complaint.urgency || '48h').toUpperCase()}
                                     </Badge>
                                 </td>
                                 <td>
-                                    <ConfidenceMeter value={complaint.confidence} />
-                                </td>
-                                <td>
-                                    <Badge variant={complaint.status === 'LINKED' ? 'success' : 'info'} size="sm">
-                                        {complaint.status}
+                                    <Badge variant={(complaint.state || 'received') === 'clustered' ? 'success' : 'info'} size="sm">
+                                        {(complaint.state || 'received').toUpperCase()}
                                     </Badge>
                                 </td>
-                                <td className="complaints__location">{complaint.location}</td>
-                                <td className="complaints__time">{complaint.time}</td>
+                                <td className="complaints__time">{getTimeAgo(complaint.created_at)}</td>
                             </tr>
                         ))}
                     </tbody>
@@ -168,15 +177,23 @@ export default function Complaints() {
 
             {/* Mobile Card View */}
             <div className="complaints__mobile-cards">
-                {mockComplaints.map((complaint) => (
+                {complaints.map((complaint) => (
                     <Card key={complaint.id} className="complaints__mobile-card">
                         <div className="complaints__mobile-card-header">
-                            <span className="complaints__id">{complaint.id}</span>
-                            <Badge variant={complaint.status === 'LINKED' ? 'success' : 'info'} size="sm">
-                                {complaint.status}
+                            <span className="complaints__id">{complaint.id.substring(0, 8)}</span>
+                            <Badge variant={(complaint.state || 'received') === 'clustered' ? 'success' : 'info'} size="sm">
+                                {((complaint.state || 'received')).toUpperCase()}
                             </Badge>
                         </div>
                         <div className="complaints__mobile-card-content">
+                            <div className="complaints__mobile-row">
+                                <span className="complaints__mobile-label">Description</span>
+                                <span className="complaints__mobile-value">{complaint.text}</span>
+                            </div>
+                            <div className="complaints__mobile-row">
+                                <span className="complaints__mobile-label">Location</span>
+                                <span className="complaints__mobile-value">{complaint.location}</span>
+                            </div>
                             <div className="complaints__mobile-row">
                                 <span className="complaints__mobile-label">Category</span>
                                 <span className="complaints__mobile-value">{complaint.category}</span>
@@ -186,27 +203,103 @@ export default function Complaints() {
                                 <SeverityBadge level={complaint.severity} />
                             </div>
                             <div className="complaints__mobile-row">
-                                <span className="complaints__mobile-label">Urgency</span>
-                                <Badge variant={complaint.urgency === 'TODAY' ? 'danger' : complaint.urgency === '48H' ? 'warning' : 'neutral'} size="sm">
-                                    {complaint.urgency}
-                                </Badge>
-                            </div>
-                            <div className="complaints__mobile-row">
-                                <span className="complaints__mobile-label">Confidence</span>
-                                <ConfidenceMeter value={complaint.confidence} />
-                            </div>
-                            <div className="complaints__mobile-row">
-                                <span className="complaints__mobile-label">Location</span>
-                                <span className="complaints__mobile-value">{complaint.location}</span>
-                            </div>
-                            <div className="complaints__mobile-row">
                                 <span className="complaints__mobile-label">Time</span>
-                                <span className="complaints__mobile-value complaints__time">{complaint.time}</span>
+                                <span className="complaints__mobile-value complaints__time">{getTimeAgo(complaint.created_at)}</span>
                             </div>
                         </div>
                     </Card>
                 ))}
             </div>
+
+            {/* Submission Form Modal */}
+            {showForm && (
+                <div className="modal-overlay" onClick={() => setShowForm(false)}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h2>Submit New Complaint</h2>
+                            <button onClick={() => setShowForm(false)} className="modal-close">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSubmit} className="complaint-form">
+                            <div className="form-group">
+                                <label>Description *</label>
+                                <textarea
+                                    required
+                                    value={formData.text}
+                                    onChange={(e) => setFormData({ ...formData, text: e.target.value })}
+                                    placeholder="Describe the issue..."
+                                    rows={4}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label>Location *</label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={formData.location}
+                                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                                    placeholder="e.g., Block 123, Yishun Avenue 1"
+                                />
+                            </div>
+
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label>Category</label>
+                                    <select
+                                        value={formData.category}
+                                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                                    >
+                                        <option value="bin_overflow">Bin Overflow</option>
+                                        <option value="litter">Litter</option>
+                                        <option value="blocked_drain">Blocked Drain</option>
+                                        <option value="pest_control">Pest Control</option>
+                                        <option value="general_cleanliness">General Cleanliness</option>
+                                    </select>
+                                </div>
+
+                                <div className="form-group">
+                                    <label>Urgency</label>
+                                    <select
+                                        value={formData.urgency}
+                                        onChange={(e) => setFormData({ ...formData, urgency: e.target.value })}
+                                    >
+                                        <option value="today">Today</option>
+                                        <option value="48h">48 Hours</option>
+                                        <option value="week">This Week</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="form-group">
+                                <label>Severity: {formData.severity}</label>
+                                <input
+                                    type="range"
+                                    min="1"
+                                    max="5"
+                                    value={formData.severity}
+                                    onChange={(e) => setFormData({ ...formData, severity: parseInt(e.target.value) })}
+                                />
+                                <div className="severity-labels">
+                                    <span>Minor</span>
+                                    <span>Critical</span>
+                                </div>
+                            </div>
+
+                            <div className="form-actions">
+                                <Button type="button" variant="ghost" onClick={() => setShowForm(false)}>
+                                    Cancel
+                                </Button>
+                                <Button type="submit" variant="primary" disabled={submitting}>
+                                    {submitting ? 'Submitting...' : 'Submit Complaint'}
+                                </Button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
@@ -221,18 +314,6 @@ function SeverityBadge({ level }: { level: number }) {
                     className={`severity-badge__dot ${n <= level ? `severity-badge__dot--${colors[level]}` : ''}`}
                 />
             ))}
-        </div>
-    )
-}
-
-function ConfidenceMeter({ value }: { value: number }) {
-    const color = value >= 0.8 ? 'var(--color-success)' : value >= 0.6 ? 'var(--color-warning)' : 'var(--color-danger)'
-    return (
-        <div className="confidence-meter">
-            <div className="confidence-meter__bar">
-                <div className="confidence-meter__fill" style={{ width: `${value * 100}%`, background: color }} />
-            </div>
-            <span className="confidence-meter__value">{Math.round(value * 100)}%</span>
         </div>
     )
 }
