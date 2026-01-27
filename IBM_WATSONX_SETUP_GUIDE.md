@@ -17,6 +17,8 @@
 5. [Embedding the Chat](#embedding-the-chat)
 6. [Troubleshooting](#troubleshooting)
 7. [Production Deployment](#production-deployment)
+8. [Advanced Integrations: Database & MCP](#advanced-integrations-database--mcp)
+9. [Appendix: MCP Proxy Setup](#appendix-mcp-proxy-setup)
 
 ---
 
@@ -77,7 +79,7 @@ chmod +x wxO-embed-chat-security-tool.sh
 
 **On Windows (WSL):**
 ```bash
-cd "/mnt/c/Users/Bryan/Desktop/IBeLuLu Hackathon/IBeLulu"
+cd "/mnt/c/Users/Bryan/Desktop/IBeLuLu Hackathon/IBeLuLu"
 chmod +x wxO-embed-chat-security-tool.sh
 ```
 
@@ -521,6 +523,127 @@ python app.py
 
 ---
 
+## 8. Advanced Integrations: Database & MCP
+
+During the implementation of sophisticated agents that need to interact with external databases (like Supabase), we established clear architectural best practices for when to use the generic Model Context Protocol (MCP) versus custom OpenAPI tools.
+
+### 8.1 The "Read vs. Write" Paradigm
+
+When integrating databases with watsonx agents, use this decision framework:
+
+| Feature | **Model Context Protocol (MCP)** | **OpenAPI + Edge Functions** |
+| :--- | :--- | :--- |
+| **Primary Use Case** | **Exploration & Reading** (Read-Only) | **Transactions & Business Logic** (Write/Execute) |
+| **Agent Role** | "Analyst" discovering data schema | "Operator" executing a specific task |
+| **Reliability** | **Medium** - Relies on LLM writing SQL | **High** - Relies on deterministic code |
+| **Complexity** | High prompt engineering required | Low prompt engineering (Simple tool call) |
+| **Example** | "List all tables", "Check recent logs" | "Submit a complaint", "Process a refund" |
+
+### 8.2 Why MCP Struggles with Writes
+
+Using a generic MCP connection (e.g., Supabase MCP) gives the agent "Generic Tools" like `execute_sql` or `list_tables`.
+*   **The Problem:** To perform a complex write (e.g., *Triage a complaint -> Insert into DB -> Log to Audit -> Notify User*), the LLM must effectively become a database administrator using prompts alone.
+*   **The Failure Mode:** The LLM often "hallucinates" convenience functions (e.g., calling `update_triage()` which doesn't exist) or fails to format complex SQL `INSERT` statements correctly (specifically escaping quotes and handling JSON types).
+
+### 8.3 The Recommended Architecture: Edge Functions
+
+For robust agent actions, move the business logic **out of the Prompt and into Code**.
+
+1.  **Create a Specific Endpoint:**
+    Instead of asking the LLM to `INSERT INTO complaints...`, create a serverless function (e.g., Supabase Edge Function) that exposes a single action: `submit-complaint`.
+
+2.  **Define Rigid Inputs (OpenAPI):**
+    Use an OpenAPI specification to define exactly what the agent must provide.
+    ```yaml
+    /submit-complaint:
+      post:
+        requestBody:
+          content:
+            application/json:
+              schema:
+                properties:
+                  category: { type: string }
+                  severity: { type: integer }
+                  text: { type: string }
+    ```
+
+3.  **Handle Logic in Code:**
+    The Edge Function handles the details:
+    *   Validating inputs
+    *   Inserting into multiple tables (transactions)
+    *   Handling formatting and types
+    *   Returning a simple "Success" message
+
+### 8.4 Implementation Checklist
+
+When adding a new capability to your agent:
+- [ ] **Is it a unique, complex action?** -> Build an Edge Function + OpenAPI.
+- [ ] **Is it a simple query or exploration?** -> Use MCP.
+- [ ] **Does it require strict data validation?** -> specific Tool (OpenAPI) is mandatory.
+
+This "Specific Tool" approach prevents the agent from struggling with syntax and allows it to focus on its primary reasoning tasks (Triage, Classification, Empathy).
+
+---
+
+## 9. Appendix: MCP Proxy Setup
+
+This section details how to set up the authentication proxy required for connecting generic MCP clients (like watsonx) to Supabase MCP, which requires custom headers.
+
+### 9.1 The Problem
+watsonx Orchestrate cannot directly connect to Supabase MCP because:
+1.  Supabase MCP requires `Authorization: Bearer sbp_...` on ALL requests.
+2.  watsonx Orchestrate's "Add remote MCP server" UI doesn't support custom headers.
+3.  No "Generic HTTP" or "Bearer Token" option is available in the simple connection dropdown.
+
+### 9.2 The Solution: Cloudflare Worker Proxy
+We deploy a lightweight authentication proxy that accepts unauthenticated requests from watsonx and injects the Supabase PAT before forwarding to Supabase.
+
+#### Architecture
+```
+[watsonx Orchestrate] --HTTP--> [Cloudflare Worker Proxy] --HTTP+Auth--> [Supabase MCP Server]
+(No Auth)                      (Injects PAT)                             (Verified)
+```
+
+### 9.3 Deployment Steps
+
+#### 1. Requirements
+- Wrangler CLI (`npm install -g wrangler`)
+- Cloudflare Account
+- Supabase Project Ref & PAT (Personal Access Token)
+
+#### 2. Configuration (`wrangler.toml`)
+Ensure your `wrangler.toml` is configured (see `mcp-proxy/wrangler.toml`).
+
+#### 3. Set Secrets
+**Never hardcode secrets in code.** Use Cloudflare's encrypted secret storage:
+```bash
+wrangler secret put SUPABASE_PROJECT_REF  # Enter your project ref
+wrangler secret put SUPABASE_PAT          # Enter your Supabase PAT
+```
+
+#### 4. Deploy
+```bash
+cd mcp-proxy
+npm install
+wrangler deploy
+```
+Copy the resulting URL (e.g., `https://supabase-mcp-proxy.your-subdomain.workers.dev`).
+
+#### 5. Configure in watsonx
+1.  Go to **Integrations → MCP Servers**.
+2.  Click **Add remote MCP server**.
+3.  URL: `https://supabase-mcp-proxy.your-subdomain.workers.dev`
+4.  Authentication: **None** (The proxy handles it).
+
+### 9.4 Security Checklist
+- [ ] **Use Read-Only PAT**: The Supabase token should only have read permissions if the agent is only reading data.
+- [ ] **Rate Limiting**: The proxy implementation (in `mcp-proxy/supabase-mcp-proxy.js`) should implement rate limits to prevent abuse.
+- [ ] **Monitoring**: Check Cloudflare analytics regularly for unusual traffic.
+
+For full implementation details, see `mcp-proxy/README.md`.
+
+---
+
 ## Additional Resources
 
 - [IBM watsonx Orchestrate Documentation](https://developer.watson-orchestrate.ibm.com)
@@ -539,6 +662,6 @@ For issues or questions:
 
 ---
 
-**Last Updated:** January 27, 2026  
-**Version:** 1.0  
+**Last Updated:** January 27, 2026
+**Version:** 1.2
 **Status:** Production Ready ✅

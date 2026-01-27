@@ -33,3 +33,6 @@ yarn-debug.log*
 pnpm-debug.log*
 .env.local
 .env.*.local
+
+# TypeScript Build Artifacts
+*.tsbuildinfo

@@ -1,0 +1,83 @@
+openapi: 3.0.0
+info:
+  title: Triage Operations API
+  description: API for submitting triaged resident complaints to Supabase
+  version: 1.0.0
+servers:
+  - url: https://gsbpchneovtpqgnyfttp.supabase.co/functions/v1/submit-complaint
+    description: Direct URL to the Supabase Edge Function
+
+paths:
+  /:
+    post:
+      summary: Submit a new complaint
+      description: Takes triaged complaint data and inserts it into the database and audit log.
+      operationId: submit_complaint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - text
+                - location_text
+                - category
+                - severity
+                - urgency
+              properties:
+                text:
+                  type: string
+                  description: The original complaint text from the user
+                location_text:
+                  type: string
+                  description: Extracted location of the issue
+                category:
+                  type: string
+                  description: Classified category (litter, noise, etc.)
+                severity:
+                  type: integer
+                  description: Severity level (1-5)
+                urgency:
+                  type: string
+                  enum: [today, 48h]
+                  description: Urgency of the issue
+                confidence:
+                  type: number
+                  format: float
+                  description: Confidence score of the classification (0.0-1.0)
+                notes:
+                  type: string
+                  description: Additional notes or reasoning
+                hazard:
+                  type: boolean
+                  description: Is this a safety hazard?
+                escalation:
+                  type: boolean
+                  description: Does this require immediate escalation?
+      responses:
+        '200':
+          description: Successful submission
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  complaint_id:
+                    type: string
+        '400':
+          description: Invalid input or database error
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - bearerAuth: []
