@@ -4,11 +4,11 @@ info:
   description: API for submitting triaged resident complaints to Supabase
   version: 1.0.0
 servers:
-  - url: https://gsbpchneovtpqgnyfttp.supabase.co/functions/v1/submit-complaint
-    description: Direct URL to the Supabase Edge Function
+  - url: https://gsbpchneovtpqgnyfttp.supabase.co/functions/v1
+    description: Base URL for Supabase Edge Functions
 
 paths:
-  /:
+  /submit-complaint:
     post:
       summary: Submit a new complaint
       description: Takes triaged complaint data and inserts it into the database and audit log.
@@ -71,6 +71,95 @@ paths:
                     type: string
         '400':
           description: Invalid input or database error
+
+  /review-cluster:
+    post:
+      summary: Review and approve a complaint cluster
+      description: Updates a cluster's status, assigns a playbook, and logs the review action.
+      operationId: review_cluster
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - cluster_id
+                - action
+                - playbook_name
+                - review_notes
+              properties:
+                cluster_id:
+                  type: string
+                  description: The ID of the cluster being reviewed
+                action:
+                  type: string
+                  enum: [APPROVE, REJECT, ESCALATE]
+                  description: The decision made by the agent
+                playbook_name:
+                  type: string
+                  description: The assigned playbook (e.g., "standard_cleanup", "deep_clean_protocol")
+                priority_score:
+                  type: number
+                  nullable: true
+                  description: Adjusted priority score (0-100) based on fairness rules
+                review_notes:
+                  type: string
+                  description: Explanation for the decision (audit trail)
+                flag_fairness:
+                  type: boolean
+                  nullable: true
+                  description: Was this boosted due to fairness rules (e.g. silent zone)?
+      responses:
+        '200':
+          description: Successful review
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  new_status:
+                    type: string
+                  message:
+                    type: string
+
+  /list-pending-clusters:
+    post:
+      summary: List all pending complaint clusters
+      description: Retrieves a list of clusters with state='TRIAGED' that require review.
+      operationId: list_pending_clusters
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                limit:
+                  type: integer
+                  default: 10
+                  description: Max number of clusters to fetch
+      responses:
+        '200':
+          description: List of pending clusters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    category:
+                      type: string
+                    severity_score:
+                      type: integer
+                    zone_id:
+                      type: string
+                    created_at:
+                      type: string
 
 components:
   securitySchemes:
