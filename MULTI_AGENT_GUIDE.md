@@ -76,9 +76,9 @@ def hello_world():
         agent_environment_id="ffd2c972-994a-4ca0-8b4d-a990cf736f7a"
     )
 
-@app.route('/new-agent')
-def new_agent():
-    """Your New Agent"""
+@app.route('/complaint-agent')
+def complaint_agent():
+    """Complaint Agent"""
     return render_template_string(
         HTML_TEMPLATE,
         orchestration_id="20260126-1305-0189-1099-b2cf449c589c_20260126-1332-1571-30ef-acf1a3847d97",
@@ -90,7 +90,7 @@ def new_agent():
 
 **Access different agents at:**
 - `http://localhost:5000/` - Hello World Agent
-- `http://localhost:5000/new-agent` - Your New Agent
+- `http://localhost:5000/complaint-agent` - Complaint Agent
 
 ---
 
