@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import './styles/global.css'
-import { initWatsonChat } from './watson-chat'
+// import { initWatsonChat } from './watson-chat'
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -26,6 +26,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 )
 
 // Initialize Watson Chat after a short delay
-setTimeout(() => {
-    initWatsonChat()
-}, 500)
+// setTimeout(() => {
+//     initWatsonChat()
+// }, 500)

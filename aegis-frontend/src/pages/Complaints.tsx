@@ -1,5 +1,7 @@
+import { useState, useRef, useEffect } from 'react'
+import { sendMessageToAgent, ChatMessage } from '../services/orchestrate'
 import { Badge, Card } from '../components/ui'
-import { Search, Filter, ArrowUpDown } from 'lucide-react'
+import { Search, Filter, ArrowUpDown, Send, User, Bot, Loader2 } from 'lucide-react'
 import './Complaints.css'
 
 // Mock complaint data
@@ -12,8 +14,102 @@ const mockComplaints = [
 ]
 
 export default function Complaints() {
+    const [messages, setMessages] = useState<ChatMessage[]>([])
+    const [input, setInput] = useState('')
+    const [isLoading, setIsLoading] = useState(false)
+    const messagesEndRef = useRef<HTMLDivElement>(null)
+
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+
+    useEffect(() => {
+        scrollToBottom()
+    }, [messages])
+
+    const handleSend = async () => {
+        if (!input.trim() || isLoading) return
+
+        const userMessage: ChatMessage = { role: 'user', text: input }
+        const newMessages = [...messages, userMessage]
+
+        setMessages(newMessages)
+        setInput('')
+        setIsLoading(true)
+
+        try {
+            const responseText = await sendMessageToAgent(newMessages)
+            const agentMessage: ChatMessage = { role: 'assistant', text: responseText }
+            setMessages((prev) => [...prev, agentMessage])
+        } catch (error) {
+            console.error(error)
+            // Optional: Add error message to chat
+            const errorMessage: ChatMessage = { role: 'assistant', text: "Sorry, I'm having trouble connecting right now." }
+            setMessages((prev) => [...prev, errorMessage])
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
     return (
         <div className="complaints">
+            <Card className="complaints__chat" padding="none">
+                <div className="complaints__chat-header">
+                    <div className="complaints__chat-title">
+                        <Bot size={20} className="complaints__chat-icon" />
+                        <span>Complaint Assistant</span>
+                    </div>
+                    {/* Optional: Add clear chat button or status indicator */}
+                </div>
+
+                <div className="complaints__chat-messages">
+                    {messages.length === 0 && (
+                        <div className="complaints__chat-empty">
+                            <Bot size={48} />
+                            <p>Hello! I can help you triage complaints. Describe an issue to get started.</p>
+                        </div>
+                    )}
+                    {messages.map((msg, idx) => (
+                        <div key={idx} className={`complaints__chat-message complaints__chat-message--${msg.role}`}>
+                            <div className="complaints__chat-avatar">
+                                {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
+                            </div>
+                            <div className="complaints__chat-bubble">
+                                {msg.text}
+                            </div>
+                        </div>
+                    ))}
+                    {isLoading && (
+                        <div className="complaints__chat-message complaints__chat-message--assistant">
+                            <div className="complaints__chat-avatar">
+                                <Bot size={16} />
+                            </div>
+                            <div className="complaints__chat-bubble complaints__chat-bubble--loading">
+                                <Loader2 size={16} className="animate-spin" />
+                            </div>
+                        </div>
+                    )}
+                    <div ref={messagesEndRef} />
+                </div>
+
+                <div className="complaints__chat-input-area">
+                    <input
+                        className="complaints__chat-input"
+                        placeholder="Type a message..."
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                        disabled={isLoading}
+                    />
+                    <button
+                        className="complaints__chat-send-btn"
+                        onClick={handleSend}
+                        disabled={isLoading || !input.trim()}
+                    >
+                        <Send size={18} />
+                    </button>
+                </div>
+            </Card>
             {/* Filter Bar */}
             <div className="complaints__filters">
                 <div className="complaints__search">

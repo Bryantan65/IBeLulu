@@ -8,4 +8,13 @@ export default defineConfig({
             '@': '/src',
         },
     },
+    server: {
+        proxy: {
+            '/api/orchestrate': {
+                target: 'https://api.ap-southeast-1.dl.watson-orchestrate.ibm.com',
+                changeOrigin: true,
+                rewrite: (path) => path.replace(/^\/api\/orchestrate/, ''),
+            },
+        },
+    },
 })
