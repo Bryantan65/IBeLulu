@@ -92,6 +92,7 @@ const SingaporeMap = forwardRef<SingaporeMapRef, SingaporeMapProps>(
             const plane = new THREE.Mesh(geometry, material)
             plane.rotation.x = -Math.PI / 2
             plane.receiveShadow = true
+            plane.visible = false // Hide plane to prevent intersection with globe
             group.add(plane)
 
             // 2. Terrain Grid (Digital Twin aesthetic)
@@ -99,6 +100,7 @@ const SingaporeMap = forwardRef<SingaporeMapRef, SingaporeMapProps>(
             gridHelper.position.y = 0.05 // Slightly above plane
             gridHelper.material.transparent = true
             gridHelper.material.opacity = 0.3
+            gridHelper.visible = false // Hide grid to prevent intersection with globe
             gridHelperRef.current = gridHelper
             group.add(gridHelper)
 
