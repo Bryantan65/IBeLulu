@@ -1,9 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Badge, Card, Button } from '../components/ui'
 import { MapPin, AlertTriangle, ClipboardCheck, RefreshCw, Shield, X, Loader2, Clock, CheckCircle } from 'lucide-react'
 import { sendMessageToAgent, ChatMessage } from '../services/orchestrate'
 import './Hotspots.css'
+
+import { GoogleMap, useJsApiLoader, Marker, MarkerClusterer, Circle } from '@react-google-maps/api';
+import { getLatLngForLocation } from '../utils/geocode';
+import { customMapStyle, darkMapStyle, lightMapStyle } from '../components/three/globe/MapTheme';
 
 const REVIEW_AGENT_ID = 'f3c41796-118f-4f5a-a77c-e29890eaca6e'
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -35,6 +39,11 @@ interface ClusterReview {
     complaint_count?: number
     last_action_at?: string
     description?: string
+}
+
+interface ClusterPosition extends Cluster {
+    lat: number
+    lng: number
 }
 
 function extractJsonArray(text: string): string | null {
@@ -94,15 +103,33 @@ function getTimeAgo(dateString: string): string {
     return date.toLocaleDateString()
 }
 
+const MAP_CENTER = { lat: 1.3521, lng: 103.8198 }; // Singapore
+const MAP_ZOOM = 12;
+const MAP_CONTAINER_STYLE = { width: '100%', height: '100%', borderRadius: 'var(--radius-lg)' };
+
+const MAP_THEMES = {
+    custom: customMapStyle,
+    dark: darkMapStyle,
+    light: lightMapStyle,
+};
+
 export default function Hotspots() {
     const navigate = useNavigate()
     const [clusters, setClusters] = useState<Cluster[]>([])
+    const [clusterPositions, setClusterPositions] = useState<ClusterPosition[]>([])
     const [loading, setLoading] = useState(true)
+    const [mapTheme, setMapTheme] = useState<'custom' | 'dark' | 'light'>(() => {
+        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+        return isDark ? 'dark' : 'light'
+    })
+    const [geocodeCache, setGeocodeCache] = useState<{ [zone: string]: { lat: number, lng: number } }>({})
+    const mapRef = useRef<google.maps.Map | null>(null)
     const [showReviewModal, setShowReviewModal] = useState(false)
     const [isReviewing, setIsReviewing] = useState(false)
     const [reviewData, setReviewData] = useState<ClusterReview[]>([])
     const [reviewError, setReviewError] = useState<string>('')
     const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set())
+    const [highlightedCluster, setHighlightedCluster] = useState<string | null>(null)
 
     const fetchClusters = async () => {
         try {
@@ -123,9 +150,59 @@ export default function Hotspots() {
         }
     }
 
+    const { isLoaded } = useJsApiLoader({
+        googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
+    });
+
     useEffect(() => {
         fetchClusters()
     }, [])
+
+    // Geocode all cluster locations when clusters change with rate limiting
+    useEffect(() => {
+        if (!isLoaded || clusters.length === 0) return;
+        let cancelled = false;
+        const fetchPositions = async () => {
+            const newCache = { ...geocodeCache };
+            const positions: (ClusterPosition | null)[] = [];
+            
+            // Process clusters in batches to avoid overwhelming the API
+            const batchSize = 5;
+            for (let i = 0; i < clusters.length; i += batchSize) {
+                if (cancelled) break;
+                
+                const batch = clusters.slice(i, i + batchSize);
+                const batchPromises = batch.map(async (c) => {
+                    if (c.zone_id && newCache[c.zone_id]) {
+                        return { ...c, ...newCache[c.zone_id] } as ClusterPosition;
+                    }
+                    try {
+                        const pos = await getLatLngForLocation(c.zone_id, import.meta.env.VITE_GOOGLE_MAPS_API_KEY);
+                        newCache[c.zone_id] = pos;
+                        return { ...c, ...pos } as ClusterPosition;
+                    } catch {
+                        return null;
+                    }
+                });
+                
+                const batchResults = await Promise.all(batchPromises);
+                positions.push(...batchResults);
+                
+                // Add delay between batches to respect API rate limits
+                if (i + batchSize < clusters.length) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+            }
+            
+            if (!cancelled) {
+                setGeocodeCache(newCache);
+                setClusterPositions(positions.filter((p): p is ClusterPosition => p !== null));
+            }
+        };
+        fetchPositions();
+        return () => { cancelled = true; };
+        // eslint-disable-next-line
+    }, [clusters, isLoaded]);
 
     const handleReviewClusters = async () => {
         setShowReviewModal(true)
@@ -257,15 +334,97 @@ NO markdown formatting. NO backticks. ONLY the JSON array.`
         setReviewData(prev => prev.filter(c => c.id !== clusterId))
     }
 
+    const handleClusterClick = (clusterId: string, lat: number, lng: number) => {
+        setHighlightedCluster(clusterId)
+        
+        // Center and zoom map to cluster location
+        if (mapRef.current) {
+            mapRef.current.panTo({ lat, lng })
+            mapRef.current.setZoom(15)
+        }
+        
+        setTimeout(() => {
+            const element = document.getElementById(`cluster-${clusterId}`)
+            const container = document.querySelector('.hotspots__clusters')
+            if (element && container) {
+                const elementTop = element.offsetTop
+                const containerHeight = container.clientHeight
+                const elementHeight = element.clientHeight
+                const scrollTo = elementTop - (containerHeight / 2) + (elementHeight / 2)
+                container.scrollTo({ top: scrollTo, behavior: 'smooth' })
+            }
+        }, 100)
+        setTimeout(() => setHighlightedCluster(null), 3000)
+    }
+
     return (
         <div className="hotspots">
-            {/* Map placeholder */}
+            {/* Map integration */}
             <div className="hotspots__map">
-                <div className="hotspots__map-placeholder">
-                    <MapPin size={48} />
-                    <span>Interactive Map</span>
-                    <p>Zone polygons and cluster markers would appear here</p>
-                </div>
+                {isLoaded ? (
+                    <div style={{ position: 'relative', height: '100%' }}>
+                        <GoogleMap
+                            onLoad={map => { mapRef.current = map; }}
+                            mapContainerStyle={MAP_CONTAINER_STYLE}
+                            center={MAP_CENTER}
+                            zoom={MAP_ZOOM}
+                            options={{
+                                styles: MAP_THEMES[mapTheme],
+                                disableDefaultUI: true,
+                                backgroundColor: 'var(--color-surface-1)',
+                                minZoom: 12,
+                                maxZoom: 18,
+                                restriction: {
+                                    latLngBounds: {
+                                        north: 1.47,
+                                        south: 1.16,
+                                        east: 104.1,
+                                        west: 103.6
+                                    },
+                                    strictBounds: true
+                                }
+                            }}
+                        >
+                            {clusterPositions.length > 0 && (
+                                clusterPositions.map((c) => (
+                                    <Circle
+                                        key={c.id}
+                                        center={{ lat: c.lat, lng: c.lng }}
+                                        radius={200 + (c.severity_score * 50)}
+                                        options={{
+                                            fillColor: c.severity_score >= 4 ? '#ef4444' : c.severity_score >= 3 ? '#f59e0b' : '#10b981',
+                                            fillOpacity: 0.6,
+                                            strokeColor: c.severity_score >= 4 ? '#dc2626' : c.severity_score >= 3 ? '#d97706' : '#059669',
+                                            strokeOpacity: 0.8,
+                                            strokeWeight: 2,
+                                            clickable: true
+                                        }}
+                                        onClick={() => {
+                                            handleClusterClick(c.id, c.lat, c.lng);
+                                        }}
+                                    />
+                                ))
+                            )}
+                        </GoogleMap>
+                        
+                        {/* Map Style Control - Outside GoogleMap but overlaid */}
+                        <div className="map-style-control">
+                            <select 
+                                value={mapTheme} 
+                                onChange={e => setMapTheme(e.target.value as 'custom' | 'dark' | 'light')}
+                            >
+                                <option value="custom">Custom</option>
+                                <option value="dark">Dark</option>
+                                <option value="light">Light</option>
+                            </select>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="hotspots__map-placeholder">
+                        <MapPin size={48} />
+                        <span>Loading Map...</span>
+                    </div>
+                )}
             </div>
 
             {/* Cluster list */}
@@ -306,7 +465,13 @@ NO markdown formatting. NO backticks. ONLY the JSON array.`
                         <div className="p-4 text-center text-muted">No active clusters found.</div>
                     ) : (
                         clusters.map((cluster) => (
-                            <Card key={cluster.id} variant="elevated" padding="md" className="hotspots__cluster">
+                            <Card 
+                                key={cluster.id} 
+                                variant="elevated" 
+                                padding="md" 
+                                className={`hotspots__cluster ${highlightedCluster === cluster.id ? 'hotspots__cluster--highlight' : ''}`}
+                                id={`cluster-${cluster.id}`}
+                            >
                                 <div className="hotspots__cluster-header">
                                     <span className="hotspots__cluster-id">{cluster.id.substring(0, 8)}</span>
                                     <Badge
