@@ -1,42 +1,86 @@
 /**
  * Telegram Webhook Handler for IBeLulu Town Council Complaint Bot
  * 
- * v19: Bypass Watson Agent - submit directly to database
- * Watson triage can happen via background process
+ * v18: Using SAME env var names as working ibm-chat function
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const TELEGRAM_BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')!
+// Try both env var names, with fallback to default
+const WATSON_HOST = Deno.env.get('WATSON_HOST') || 'https://ap-southeast-1.dl.watson-orchestrate.ibm.com'
+const WATSON_AGENT_ID = Deno.env.get('WATSON_AGENT_ID')!
+const WATSON_AGENT_ENV_ID = Deno.env.get('WATSON_AGENT_ENV_ID')!
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
 /**
- * Submit complaint directly to database (bypass Watson)
+ * Get JWT token from watson-token-internal (RS256 signed, no auth required)
  */
-async function submitComplaint(supabase: any, complaintText: string, userId: string, username: string): Promise<any> {
-  console.log('[Submit] Inserting complaint directly to database...')
+async function getWatsonJWT(userId: string, username: string): Promise<string> {
+  console.log('[JWT] Getting token from watson-token-internal...')
   
-  const { data, error } = await supabase
-    .from('complaints')
-    .insert({
-      text: complaintText,
-      telegram_user_id: userId,
-      telegram_username: username,
-      status: 'pending_triage',
-      source: 'telegram'
+  const tokenResponse = await fetch(`${SUPABASE_URL}/functions/v1/watson-token-internal`, {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      user_id: `telegram-${userId}`,
+      name: username,
+      email: `${userId}@telegram.bot`
     })
-    .select()
-    .single()
+  })
+
+  if (!tokenResponse.ok) {
+    const errorText = await tokenResponse.text()
+    console.error('[JWT] Failed:', errorText)
+    throw new Error(`Token failed: ${tokenResponse.status}`)
+  }
+
+  const tokenData = await tokenResponse.json()
+  console.log('[JWT] ✓ Got token')
+  return tokenData.token
+}
+
+/**
+ * Send message to Watson Agent using AGENT API (same as ibm-chat)
+ */
+async function sendToWatsonAgent(jwt: string, message: string): Promise<any> {
+  console.log('[Watson] Sending via agent API...')
+  console.log('[Watson] Agent ID:', WATSON_AGENT_ID)
+  console.log('[Watson] Env ID:', WATSON_AGENT_ENV_ID)
   
-  if (error) {
-    console.error('[Submit] Error:', error)
-    throw new Error(`Database error: ${error.message}`)
+  // Use AGENT API endpoint (same as working ibm-chat function)
+  const url = `${WATSON_HOST}/api/v1/agents/${WATSON_AGENT_ID}/environments/${WATSON_AGENT_ENV_ID}/chat/completions`
+  console.log('[Watson] URL:', url)
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${jwt}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({
+      messages: [
+        { 
+          role: 'user', 
+          content: message
+        }
+      ]
+    })
+  })
+  
+  if (!response.ok) {
+    const errorText = await response.text()
+    console.error('[Watson] Error:', errorText)
+    throw new Error(`Watson ${response.status}: ${errorText}`)
   }
   
-  console.log('[Submit] ✓ Complaint saved:', data.id)
-  return data
+  console.log('[Watson] ✓ Success')
+  return await response.json()
 }
 
 async function sendTelegramMessage(chatId: number, text: string, replyToMessageId?: number): Promise<void> {
@@ -154,14 +198,18 @@ serve(async (req) => {
         try {
           await sendTelegramMessage(chatId, '⏳ Processing...', messageId)
 
-          // Submit directly to database (bypass Watson for now)
-          const complaint = await submitComplaint(supabase, complaintText, userId.toString(), username)
+          const jwt = await getWatsonJWT(userId.toString(), username)
           
+          const watsonResponse = await sendToWatsonAgent(jwt, complaintText)
+          
+          const choices = watsonResponse.choices || []
           let responseText = '✅ *Complaint Submitted!*\n\n'
-          responseText += `🆔 ID: \`${complaint.id.substring(0, 8)}\`\n`
-          responseText += `📝 "${complaintText.substring(0, 50)}${complaintText.length > 50 ? '...' : ''}"\n\n`
-          responseText += `Status: Pending review\n\n`
-          responseText += `📱 /status ${complaint.id.substring(0, 8)}\n📋 /mycomplaints\n\nThank you! 🌟`
+
+          if (choices.length > 0 && choices[0].message?.content) {
+            responseText += choices[0].message.content + '\n\n'
+          }
+          
+          responseText += `Submitted to Lulu Town Council.\n\n📱 /status <id>\n📋 /mycomplaints\n\nThank you! 🌟`
           
           await sendTelegramMessage(chatId, responseText, messageId)
           
