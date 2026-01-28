@@ -36,3 +36,6 @@ pnpm-debug.log*
 
 # TypeScript Build Artifacts
 *.tsbuildinfo
+
+# Claude MCP Configuration
+.claude/
