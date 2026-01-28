@@ -1,4 +1,4 @@
-import { Bell, Send, User, Settings, Menu, Sun, Moon } from 'lucide-react'
+import { Bell, User, Settings, Menu, Sun, Moon } from 'lucide-react'
 import { useThemeStore } from '../../store'
 import './TopNav.css'
 
@@ -26,11 +26,6 @@ export default function TopNav({ title, subtitle, onMobileMenuToggle }: TopNavPr
             </div>
 
             <div className="topnav__actions">
-                <button className="topnav__action topnav__action--primary">
-                    <Send size={18} />
-                    <span>Dispatch</span>
-                </button>
-
                 <button className="topnav__icon-btn topnav__notification">
                     <Bell size={20} />
                     <span className="topnav__notification-badge">3</span>
