@@ -37,8 +37,13 @@ def init_clients():
     global supabase, jwt_generator
     
     if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
-        supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-        logger.info("✅ Supabase client initialized")
+        logger.info(f"SUPABASE_URL: {SUPABASE_URL[:30]}... (len={len(SUPABASE_URL)})")
+        logger.info(f"SUPABASE_SERVICE_ROLE_KEY: {SUPABASE_SERVICE_ROLE_KEY[:5]}...{SUPABASE_SERVICE_ROLE_KEY[-5:]} (len={len(SUPABASE_SERVICE_ROLE_KEY)})")
+        try:
+            supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+            logger.info("✅ Supabase client initialized")
+        except Exception as e:
+            logger.error(f"❌ Supabase client failed: {e}")
     
     if WATSON_PRIVATE_KEY and IBM_PUBLIC_KEY:
         jwt_generator = WatsonJWTGenerator(
