@@ -161,7 +161,13 @@ def health():
         "status": "ok",
         "service": "IBeLulu Telegram Bot",
         "watson_configured": jwt_generator is not None,
-        "supabase_configured": supabase is not None
+        "supabase_configured": supabase is not None,
+        "debug": {
+            "has_telegram_token": TELEGRAM_BOT_TOKEN is not None,
+            "has_supabase_url": SUPABASE_URL is not None,
+            "has_supabase_key": SUPABASE_SERVICE_ROLE_KEY is not None,
+            "supabase_url_value": SUPABASE_URL[:30] + "..." if SUPABASE_URL else None
+        }
     })
 
 @app.route('/webhook', methods=['POST'])
