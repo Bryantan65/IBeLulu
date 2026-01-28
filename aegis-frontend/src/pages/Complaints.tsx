@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { sendMessageToAgent, ChatMessage } from '../services/orchestrate'
 import { Badge, Card, Button } from '../components/ui'
-import { Search, ArrowUpDown, Send, User, Bot, Loader2, Plus, MapPin, X, ClipboardCheck } from 'lucide-react'
+import { Search, ArrowUpDown, Send, User, Bot, Loader2, Plus, MapPin, X, ClipboardCheck, RefreshCw } from 'lucide-react'
 
 // Agent IDs
 const COMPLAINTS_AGENT_ID = 'addd6d7a-97ab-44db-8774-30fb15f7a052'
@@ -63,6 +63,7 @@ export default function Complaints() {
 
     // Complaints list state
     const [complaints, setComplaints] = useState<Complaint[]>([])
+    const [isRefreshing, setIsRefreshing] = useState(false)
 
     // Form state
     const [showForm, setShowForm] = useState(false)
@@ -139,6 +140,12 @@ export default function Complaints() {
         } finally {
             setSubmitting(false)
         }
+    }
+
+    const handleRefresh = async () => {
+        setIsRefreshing(true)
+        await fetchComplaints()
+        setIsRefreshing(false)
     }
 
     // Load complaints on mount
@@ -263,6 +270,14 @@ export default function Complaints() {
                     <Search size={18} />
                     <input type="text" placeholder="Search complaints..." />
                 </div>
+                <Button
+                    variant="ghost"
+                    icon={<RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />}
+                    onClick={handleRefresh}
+                    disabled={isRefreshing}
+                >
+                    Refresh
+                </Button>
                 <Button
                     variant="secondary"
                     icon={<ClipboardCheck size={16} />}
