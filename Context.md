@@ -117,7 +117,8 @@ Hotspot clusters are persistent entities with state transitions. Agents operate 
 - **Agents (powered by IBM watsonx.ai):**
   - ComplaintsAgent (triage)
   - ReviewAgent (playbook + fairness + gating)
-  - SchedulingAgent (run sheet generation)
+  - RunSheetPlannerAgent (AI optimizer - creates draft run sheets from approved tasks)
+  - DispatchCoordinatorAgent (supervisor - reviews, dispatches, and monitors run sheets)
   - ForecastAgent (tomorrow risk + proactive tasks)
   - Verification flow (human + optional evidence checks)
   
@@ -252,22 +253,60 @@ Logs `REVIEW`.
 
 ---
 
-### 8.4 Scheduling Agent (RUN SHEET)
-**Input:** approved clusters, manpower per team, AM/PM windows, caps  
-**Output JSON:** run_sheet by team and time window
+### 8.4 RunSheet Planner Agent (AI OPTIMIZER)
+**Role:** Creates optimized draft run sheets from approved tasks
 
-Heuristic:
-1) Sort by priority_score
-2) Map playbook to task types + teams
-3) Bundle by zone_id
-4) Order within zone by nearest-next
-5) Cap tasks per team/time window
+**Input:** approved tasks, team availability, manpower per team, AM/PM windows, capacity constraints  
+**Output JSON:** draft run_sheets by team and time window
+
+**AI Optimization Process:**
+1) Geographic clustering - group tasks by proximity
+2) Priority sorting - high urgency tasks first
+3) Team-zone matching - assign teams to their primary zones when possible
+4) Capacity balancing - distribute workload evenly across teams
+5) Route optimization - order tasks for minimal travel within zone
+6) Draft creation - generate run sheets with status='draft' for supervisor review
+
+**Tools:**
+- create-tasks-from-clusters: Convert reviewed clusters into approved tasks
+- get-pending-tasks: Retrieve tasks needing scheduling
+- get-team-availability: Check team capacity and assignments
+- create-run-sheet: Generate optimized draft run sheet
+- get-run-sheets: Review created run sheets
+
+**Output:** Tasks updated to status='SCHEDULED', run sheets created with status='draft'
 
 Logs `PLAN`.
 
 ---
 
-### 8.5 NEW: Forecast Agent (TOMORROW PLAN)
+### 8.5 Dispatch Coordinator Agent (SUPERVISOR)
+**Role:** Reviews draft run sheets, adds instructions, dispatches to field teams
+
+**Input:** draft run_sheets, team status, operational context  
+**Output:** dispatched run sheets with notes and assignments
+
+**Workflow:**
+1) Review draft run sheets created by Planner
+2) Add dispatch notes and special instructions
+3) Validate team readiness and capacity
+4) Dispatch approved run sheets to field teams
+5) Monitor run sheet status and completion
+6) Handle exceptions and reassignments
+
+**Tools:**
+- get-run-sheets: View draft and dispatched run sheets
+- dispatch-run-sheet: Send run sheet to field team with notes
+
+**Output:** Run sheets updated to status='dispatched', notifications sent, audit log updated
+
+**Collaboration:** Works with RunSheet_Planner_Agent (receives optimized drafts for review)
+
+Logs `DISPATCH`.
+
+---
+
+### 8.6 NEW: Forecast Agent (TOMORROW PLAN)
 **Runs daily** (or on-demand demo button).
 
 **Input:**
@@ -290,7 +329,7 @@ Logs `FORECAST`.
 
 ---
 
-### 8.6 NEW: What-If Simulator
+### 8.7 NEW: What-If Simulator
 **Input:**
 - Knobs: fairness_boost_strength, manpower, proactive_budget, SLA thresholds, caps
 
@@ -346,7 +385,8 @@ Logs `SIMULATE`.
 ### Day 2
 - Review Agent playbooks + fairness + gating
 - Supervisor approval flow
-- Scheduling Agent run sheet generation
+- RunSheet Planner Agent - AI optimization for draft run sheets
+- Dispatch Coordinator Agent - supervisor review and dispatch
 - Dashboard: review queue + run sheet
 - Add simulation scaffolding (store knobs + metrics)
 
