@@ -396,3 +396,46 @@
 .animate-spin {
     animation: spin 1s linear infinite;
 }
+
+/* Review Modal Styles */
+.modal-content--large {
+    max-width: 700px;
+    width: 90vw;
+}
+
+.review-modal-body {
+    padding: var(--space-4);
+    min-height: 200px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.review-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    padding: var(--space-8);
+    color: var(--color-text-muted);
+}
+
+.review-loading p {
+    font-size: var(--text-sm);
+}
+
+.review-response {
+    background: var(--color-surface-2);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+}
+
+.review-response pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    line-height: 1.6;
+    color: var(--color-text);
+    margin: 0;
+}

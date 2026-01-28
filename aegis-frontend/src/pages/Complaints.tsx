@@ -1,7 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
 import { sendMessageToAgent, ChatMessage } from '../services/orchestrate'
 import { Badge, Card, Button } from '../components/ui'
-import { Search, ArrowUpDown, Send, User, Bot, Loader2, Plus, MapPin, X } from 'lucide-react'
+import { Search, ArrowUpDown, Send, User, Bot, Loader2, Plus, MapPin, X, ClipboardCheck } from 'lucide-react'
+
+// Agent IDs
+const COMPLAINTS_AGENT_ID = 'addd6d7a-97ab-44db-8774-30fb15f7a052'
+const REVIEW_AGENT_ID = 'f3c41796-118f-4f5a-a77c-e29890eaca6e'
 import './Complaints.css'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -70,6 +74,11 @@ export default function Complaints() {
         urgency: '48h',
         severity: 3
     })
+
+    // Review Agent state
+    const [showReviewModal, setShowReviewModal] = useState(false)
+    const [isReviewing, setIsReviewing] = useState(false)
+    const [reviewResponse, setReviewResponse] = useState<string>('')
 
     // Fetch complaints from Supabase
     const fetchComplaints = async () => {
@@ -156,16 +165,36 @@ export default function Complaints() {
         setIsLoading(true)
 
         try {
-            const responseText = await sendMessageToAgent(newMessages)
+            const responseText = await sendMessageToAgent(newMessages, COMPLAINTS_AGENT_ID)
             const agentMessage: ChatMessage = { role: 'assistant', text: responseText }
             setMessages((prev) => [...prev, agentMessage])
         } catch (error) {
             console.error(error)
-            // Optional: Add error message to chat
             const errorMessage: ChatMessage = { role: 'assistant', text: "Sorry, I'm having trouble connecting right now." }
             setMessages((prev) => [...prev, errorMessage])
         } finally {
             setIsLoading(false)
+        }
+    }
+
+    // Handle Review Complaints button click
+    const handleReviewComplaints = async () => {
+        setShowReviewModal(true)
+        setIsReviewing(true)
+        setReviewResponse('')
+
+        try {
+            const reviewMessage: ChatMessage = {
+                role: 'user',
+                text: "Review triaged complaints. Execute SQL on project 'gsbpchneovtpqgnyfttp': SELECT * FROM clusters WHERE state = 'TRIAGED' LIMIT 5;"
+            }
+            const responseText = await sendMessageToAgent([reviewMessage], REVIEW_AGENT_ID)
+            setReviewResponse(responseText)
+        } catch (error) {
+            console.error(error)
+            setReviewResponse('Failed to connect to the Review Agent. Please try again.')
+        } finally {
+            setIsReviewing(false)
         }
     }
 
@@ -234,6 +263,14 @@ export default function Complaints() {
                     <Search size={18} />
                     <input type="text" placeholder="Search complaints..." />
                 </div>
+                <Button
+                    variant="secondary"
+                    icon={<ClipboardCheck size={16} />}
+                    onClick={handleReviewComplaints}
+                    disabled={isReviewing}
+                >
+                    Review Complaints
+                </Button>
                 <Button
                     variant="primary"
                     icon={<Plus size={16} />}
@@ -409,6 +446,40 @@ export default function Complaints() {
                                 </Button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Review Agent Modal */}
+            {showReviewModal && (
+                <div className="modal-overlay" onClick={() => setShowReviewModal(false)}>
+                    <div className="modal-content modal-content--large" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h2><ClipboardCheck size={20} /> Review Agent</h2>
+                            <button onClick={() => setShowReviewModal(false)} className="modal-close">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="review-modal-body">
+                            {isReviewing ? (
+                                <div className="review-loading">
+                                    <Loader2 size={32} className="animate-spin" />
+                                    <p>Review Agent is analyzing triaged clusters...</p>
+                                </div>
+                            ) : (
+                                <div className="review-response">
+                                    <pre>{reviewResponse}</pre>
+                                </div>
+                            )}
+                        </div>
+                        <div className="form-actions">
+                            <Button variant="ghost" onClick={() => setShowReviewModal(false)}>
+                                Close
+                            </Button>
+                            <Button variant="primary" onClick={handleReviewComplaints} disabled={isReviewing}>
+                                {isReviewing ? 'Reviewing...' : 'Run Again'}
+                            </Button>
+                        </div>
                     </div>
                 </div>
             )}
