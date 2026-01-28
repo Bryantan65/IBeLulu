@@ -1,0 +1,354 @@
+openapi: 3.0.0
+info:
+  title: Town Council Scheduling API
+  description: API for generating and managing run sheets and team schedules
+  version: 1.0.0
+servers:
+  - url: https://gsbpchneovtpqgnyfttp.supabase.co/functions/v1
+    description: Supabase Edge Functions
+
+paths:
+  /create-tasks-from-clusters:
+    post:
+      operationId: create_tasks_from_clusters
+      summary: Convert reviewed clusters into tasks
+      description: Creates task records from reviewed clusters that are ready for scheduling. Can be called without a request body to convert all reviewed clusters.
+      responses:
+        '200':
+          description: Tasks created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  tasks_created:
+                    type: integer
+                  tasks:
+                    type: array
+                    items:
+                      type: object
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+  /get-pending-tasks:
+    get:
+      operationId: get_pending_tasks
+      summary: Get pending approved tasks
+      description: Retrieve all approved tasks that need to be scheduled into run sheets
+      parameters:
+        - name: status
+          in: query
+          description: Filter by task status (approved, pending_schedule, or scheduled). Leave empty to get all.
+          required: false
+          schema:
+            type: string
+            nullable: true
+        - name: priority
+          in: query
+          description: Filter by priority level (today, 48h, week, or proactive). Leave empty to get all.
+          required: false
+          schema:
+            type: string
+            nullable: true
+        - name: zone
+          in: query
+          description: Filter by zone/area. Leave empty to get all.
+          required: false
+          schema:
+            type: string
+            nullable: true
+      responses:
+        '200':
+          description: List of pending tasks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  tasks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        task_id:
+                          type: string
+                        complaint_id:
+                          type: string
+                        category:
+                          type: string
+                        location:
+                          type: string
+                        zone:
+                          type: string
+                        priority:
+                          type: string
+                        severity:
+                          type: integer
+                        created_at:
+                          type: string
+                          format: date-time
+                  total_count:
+                    type: integer
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+  /get-team-availability:
+    get:
+      operationId: get_team_availability
+      summary: Get team availability
+      description: Retrieve available teams and their capacity for scheduling. Defaults to today's date and AM window if not specified.
+      parameters:
+        - name: date
+          in: query
+          description: Date to check availability in format YYYY-MM-DD (e.g., 2026-01-28)
+          required: false
+          allowEmptyValue: true
+          schema:
+            type: string
+        - name: window
+          in: query
+          description: Time window, either AM or PM
+          required: false
+          allowEmptyValue: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Team availability information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  date:
+                    type: string
+                  window:
+                    type: string
+                  teams:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        team_id:
+                          type: string
+                        team_name:
+                          type: string
+                        members_count:
+                          type: integer
+                        max_tasks:
+                          type: integer
+                        assigned_tasks:
+                          type: integer
+                        available_capacity:
+                          type: integer
+                        primary_zone:
+                          type: string
+                  total_capacity:
+                    type: integer
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+  /create-run-sheet:
+    post:
+      operationId: create_run_sheet
+      summary: Create a new run sheet
+      description: Generate and save an optimized run sheet for a team
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - team_id
+                - date
+                - time_window
+                - task_ids
+              properties:
+                team_id:
+                  type: string
+                  description: Team assigned to this run sheet
+                  example: "team-alpha"
+                date:
+                  type: string
+                  format: date
+                  description: Date for the run sheet
+                  example: "2026-01-27"
+                time_window:
+                  type: string
+                  description: Time window (AM or PM)
+                  example: "AM"
+                task_ids:
+                  type: array
+                  description: Ordered list of task IDs
+                  items:
+                    type: string
+                  example: ["task-1", "task-2", "task-3"]
+                zones_covered:
+                  type: array
+                  description: List of zones covered
+                  items:
+                    type: string
+                notes:
+                  type: string
+                  description: Additional notes for the team
+      responses:
+        '200':
+          description: Run sheet created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  run_sheet_id:
+                    type: string
+                  message:
+                    type: string
+                  capacity_used_percent:
+                    type: number
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+  /get-run-sheets:
+    get:
+      operationId: get_run_sheets
+      summary: Get run sheets
+      description: Retrieve run sheets by date, team, or status
+      parameters:
+        - name: date
+          in: query
+          description: Filter by date (YYYY-MM-DD)
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: team_id
+          in: query
+          description: Filter by team
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Filter by status (draft, dispatched, in_progress, or completed)
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of run sheets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  run_sheets:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        run_sheet_id:
+                          type: string
+                        team_id:
+                          type: string
+                        team_name:
+                          type: string
+                        date:
+                          type: string
+                        window:
+                          type: string
+                        status:
+                          type: string
+                        total_tasks:
+                          type: integer
+                        completed_tasks:
+                          type: integer
+                        zones_covered:
+                          type: array
+                          items:
+                            type: string
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+  /dispatch-run-sheet:
+    post:
+      operationId: dispatch_run_sheet
+      summary: Dispatch a run sheet
+      description: Send run sheet to ops channel and notify team
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - run_sheet_id
+              properties:
+                run_sheet_id:
+                  type: string
+                  description: ID of the run sheet to dispatch
+                notify_channel:
+                  type: boolean
+                  description: Send notification to ops channel
+                  default: true
+                notify_team:
+                  type: boolean
+                  description: Send notification to team members
+                  default: true
+      responses:
+        '200':
+          description: Run sheet dispatched successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  dispatched_at:
+                    type: string
+                    format: date-time
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
+        '404':
+          description: Run sheet not found
+        '500':
+          description: Server error
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - BearerAuth: []
