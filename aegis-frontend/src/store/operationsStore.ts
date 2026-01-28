@@ -6,8 +6,6 @@ export interface Complaint {
     userId: string
     text: string
     photoUrl?: string
-    lat: number
-    lng: number
     locationLabel: string
     createdAt: string
     channel: 'telegram' | 'web'
@@ -22,8 +20,6 @@ export interface Complaint {
 export interface Cluster {
     id: string
     category: string
-    centroidLat: number
-    centroidLng: number
     zoneId: string
     state: 'NEW' | 'TRIAGED' | 'REVIEWED' | 'PLANNED' | 'DISPATCHED' | 'VERIFIED' | 'CLOSED'
     severityScore: number

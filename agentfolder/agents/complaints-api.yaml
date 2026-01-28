@@ -21,34 +21,31 @@ paths:
               type: object
               required:
                 - text
-                - location
+                - location_text
               properties:
                 text:
                   type: string
                   description: Description of the complaint
                   example: "Bin overflow at Block 123"
-                location:
+                location_text:
                   type: string
-                  description: Location of the issue
+                  description: Location of the issue (human-readable)
                   example: "Block 123, Yishun Avenue 1"
-                lat:
-                  type: number
-                  description: Latitude coordinate
-                  example: 1.4290
-                lng:
-                  type: number
-                  description: Longitude coordinate
-                  example: 103.8350
                 category:
                   type: string
                   description: Category of complaint
                   enum:
-                    - bin_overflow
                     - litter
+                    - overflow
+                    - smell
+                    - cleaning
                     - blocked_drain
-                    - pest_control
-                    - general_cleanliness
-                  example: "bin_overflow"
+                    - pest
+                    - walkway_cleanliness
+                    - lighting
+                    - noise
+                    - other
+                  example: "overflow"
                 severity:
                   type: integer
                   description: Severity level (1-5)

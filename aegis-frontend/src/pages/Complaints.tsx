@@ -21,8 +21,6 @@ interface Complaint {
     confidence: number | null
     status: string | null
     created_at: string
-    lat: number | null
-    lng: number | null
     photo_url: string | null
     user_id: string | null
     cluster_id: string | null
