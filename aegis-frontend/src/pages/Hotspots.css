@@ -104,6 +104,18 @@
     color: var(--color-text-secondary);
 }
 
+.hotspots__cluster-description {
+    margin-top: var(--space-2);
+    padding: var(--space-2);
+    background: var(--color-surface-2);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+    line-height: 1.4;
+    border-left: 2px solid var(--color-primary);
+    font-style: italic;
+}
+
 .hotspots__cluster-footer {
     display: flex;
     justify-content: space-between;
@@ -305,12 +317,58 @@
     gap: var(--space-3);
 }
 
+.review-card__description {
+    padding: var(--space-3);
+    background: var(--color-surface-1);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    color: var(--color-text);
+    line-height: 1.5;
+    border: 1px solid var(--color-border-subtle);
+    margin-bottom: var(--space-2);
+}
+
+.review-card__description--empty {
+    background: var(--color-warning-subtle);
+    border-color: var(--color-warning);
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+.review-card__info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+}
+
 .review-card__info {
     display: flex;
     align-items: center;
     gap: var(--space-2);
     font-size: var(--text-xs);
     color: var(--color-text-muted);
+}
+
+.review-card__playbook {
+    background: var(--color-primary-subtle);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    color: var(--color-primary);
+    border-left: 3px solid var(--color-primary);
+}
+
+.review-card__alert {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    background: var(--color-warning-subtle);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    color: var(--color-warning);
+    font-weight: var(--font-medium);
 }
 
 .review-card__reason {
