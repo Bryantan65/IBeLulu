@@ -171,6 +171,33 @@ serve(async (req) => {
 
         if (fetchError) throw fetchError
 
+        // Log the planning action to audit_log
+        try {
+            await supabaseClient
+                .from('audit_log')
+                .insert({
+                    action: 'PLAN',
+                    entity_type: 'run_sheet',
+                    entity_id: runSheet.id,
+                    agent_name: 'RunSheetPlannerAgent',
+                    inputs_summary: {
+                        team_id: body.team_id,
+                        date: body.date,
+                        time_window: body.time_window,
+                        task_count: body.task_ids.length,
+                        zones_covered: body.zones_covered
+                    },
+                    outputs_summary: {
+                        run_sheet_id: runSheet.id,
+                        status: 'draft',
+                        capacity_used_percent: capacityUsedPercent,
+                        tasks_scheduled: body.task_ids.length
+                    }
+                })
+        } catch (auditError) {
+            console.warn('Failed to log to audit_log:', auditError)
+        }
+
         return new Response(
             JSON.stringify({
                 success: true,

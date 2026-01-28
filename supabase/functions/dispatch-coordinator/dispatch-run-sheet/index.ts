@@ -134,7 +134,7 @@ serve(async (req) => {
 
         if (updateError) throw updateError
 
-        // Log the dispatch action to audit_log if table exists
+        // Log the dispatch action to audit_log
         try {
             await supabaseClient
                 .from('audit_log')
@@ -142,13 +142,20 @@ serve(async (req) => {
                     action: 'RUN_SHEET_DISPATCHED',
                     entity_type: 'run_sheet',
                     entity_id: body.run_sheet_id,
-                    details: {
+                    agent_name: 'DispatchCoordinatorAgent',
+                    inputs_summary: {
+                        run_sheet_id: body.run_sheet_id,
+                        notify_team: body.notify_team ?? true,
+                        dispatch_notes: body.dispatch_notes
+                    },
+                    outputs_summary: {
                         team_id: runSheet.team_id,
                         team_name: runSheet.teams?.name,
                         date: runSheet.date,
                         time_window: runSheet.time_window,
                         task_count: runSheet.run_sheet_tasks?.length,
-                        notify_team: body.notify_team ?? true
+                        zones_covered: runSheet.zones_covered,
+                        status: 'dispatched'
                     }
                 })
         } catch (auditError) {
