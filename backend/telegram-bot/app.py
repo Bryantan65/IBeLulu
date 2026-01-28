@@ -1,293 +1,213 @@
-"""
-Telegram Bot Backend for IBeLulu Town Council
-Hosted on Railway - handles webhook and Watson integration
-"""
-
+import json
 import os
-import logging
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import requests
-from supabase import create_client, Client
-from jwt_generator import WatsonJWTGenerator
+import time
+import urllib.request
+from typing import Dict, List, Optional
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
-CORS(app)
+def load_env_file(path: str) -> None:
+    if not os.path.exists(path):
+        return
+    with open(path, 'r', encoding='utf-8') as f:
+        for line in f:
+            raw = line.strip()
+            if not raw or raw.startswith('#') or '=' not in raw:
+                continue
+            key, value = raw.split('=', 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
 
-# Environment variables
-TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
-WATSON_HOST = os.environ.get('WATSON_HOST', 'https://ap-southeast-1.dl.watson-orchestrate.ibm.com')
-WATSON_AGENT_ID = os.environ.get('WATSON_AGENT_ID')
-WATSON_AGENT_ENV_ID = os.environ.get('WATSON_AGENT_ENV_ID')
-SUPABASE_URL = os.environ.get('SUPABASE_URL')
-SUPABASE_SERVICE_ROLE_KEY = os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
-WATSON_PRIVATE_KEY = os.environ.get('WATSON_PRIVATE_KEY')
-IBM_PUBLIC_KEY = os.environ.get('IBM_PUBLIC_KEY')
 
-# Initialize clients
-supabase: Client = None
-jwt_generator: WatsonJWTGenerator = None
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+load_env_file(os.path.join(BASE_DIR, '.env.local'))
 
-def init_clients():
-    """Initialize Supabase and JWT generator"""
-    global supabase, jwt_generator
-    
-    if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
-        supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-        logger.info("✅ Supabase client initialized")
-    
-    if WATSON_PRIVATE_KEY and IBM_PUBLIC_KEY:
-        jwt_generator = WatsonJWTGenerator(
-            private_key_pem=WATSON_PRIVATE_KEY,
-            ibm_public_key_pem=IBM_PUBLIC_KEY
-        )
-        logger.info("✅ JWT generator initialized")
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '').strip()
+SUPABASE_URL = os.environ.get('SUPABASE_URL', '').strip()
+SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY', '').strip()
 
-def send_telegram_message(chat_id: int, text: str, reply_to_message_id: int = None):
-    """Send message via Telegram API"""
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": chat_id,
-        "text": text,
-        "parse_mode": "Markdown"
-    }
-    if reply_to_message_id:
-        payload["reply_to_message_id"] = reply_to_message_id
-    
-    response = requests.post(url, json=payload)
-    return response.json()
+WXO_HOST_URL = os.environ.get('WXO_HOST_URL', 'https://api.ap-southeast-1.dl.watson-orchestrate.ibm.com').strip()
+WXO_INSTANCE_ID = os.environ.get('WXO_INSTANCE_ID', '20260126-1332-1571-30ef-acf1a3847d97').strip()
+WXO_AGENT_ID = os.environ.get('WXO_AGENT_ID', 'addd6d7a-97ab-44db-8774-30fb15f7a052').strip()
 
-def get_watson_jwt(user_id: str, username: str) -> str:
-    """Generate JWT token for Watson API"""
-    if not jwt_generator:
-        raise Exception("JWT generator not initialized")
-    
-    token = jwt_generator.generate_token(
-        user_id=f"telegram-{user_id}",
-        user_data={"name": username, "email": f"{user_id}@telegram.bot"},
-        context={"source": "telegram", "user_id": user_id}
+POLL_TIMEOUT = int(os.environ.get('TELEGRAM_POLL_TIMEOUT', '50'))
+MAX_HISTORY = int(os.environ.get('WXO_MAX_HISTORY', '12'))
+
+TOKEN_ENDPOINT = f"{SUPABASE_URL}/functions/v1/watson-token" if SUPABASE_URL else ''
+
+cached_token: Optional[str] = None
+token_expiry: Optional[int] = None
+
+history_by_user: Dict[int, List[Dict[str, str]]] = {}
+
+
+def log(msg: str) -> None:
+    print(msg, flush=True)
+
+
+def http_request(url: str, method: str = 'GET', headers: Optional[dict] = None, body: Optional[dict] = None) -> dict:
+    data = None
+    if body is not None:
+        data = json.dumps(body).encode('utf-8')
+    req = urllib.request.Request(url=url, data=data, method=method)
+    if headers:
+        for key, value in headers.items():
+            req.add_header(key, value)
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        payload = resp.read().decode('utf-8')
+        if not payload:
+            return {}
+        return json.loads(payload)
+
+
+def get_valid_token() -> str:
+    global cached_token, token_expiry
+    if cached_token and token_expiry and int(time.time()) < (token_expiry - 300):
+        return cached_token
+
+    if not TOKEN_ENDPOINT or not SUPABASE_ANON_KEY:
+        raise RuntimeError('Missing SUPABASE_URL or SUPABASE_ANON_KEY env vars.')
+
+    log('Fetching IBM token via Supabase Edge Function...')
+    data = http_request(
+        TOKEN_ENDPOINT,
+        method='POST',
+        headers={
+            'Authorization': f'Bearer {SUPABASE_ANON_KEY}',
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+        },
+        body={},
     )
-    logger.info(f"✅ JWT generated for user {user_id}")
-    return token
 
-def send_to_watson_agent(jwt: str, message: str) -> dict:
-    """Send message to Watson Agent API"""
-    url = f"{WATSON_HOST}/api/v1/agents/{WATSON_AGENT_ID}/environments/{WATSON_AGENT_ENV_ID}/chat/completions"
-    
-    headers = {
-        "Authorization": f"Bearer {jwt}",
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-    
-    payload = {
-        "messages": [
-            {"role": "user", "content": message}
-        ]
-    }
-    
-    logger.info(f"📤 Sending to Watson: {url}")
-    response = requests.post(url, headers=headers, json=payload)
-    
-    if not response.ok:
-        logger.error(f"❌ Watson error: {response.status_code} - {response.text}")
-        raise Exception(f"Watson {response.status_code}: {response.text}")
-    
-    logger.info("✅ Watson response received")
-    return response.json()
+    token = data.get('token')
+    expires_at = data.get('expires_at')
+    if not token:
+        raise RuntimeError(f'No token in response: {data}')
 
-def queue_failed_message(telegram_user_id: str, chat_id: str, message_text: str, error_message: str):
-    """Save failed message to database for retry"""
-    if supabase:
-        supabase.table('failed_messages').insert({
-            "telegram_user_id": telegram_user_id,
-            "telegram_chat_id": chat_id,
-            "message_text": message_text,
-            "error_message": error_message,
-            "status": "pending"
-        }).execute()
+    cached_token = token
+    token_expiry = int(expires_at) if expires_at else int(time.time()) + 3600
+    return cached_token
 
-def check_complaint_status(complaint_id: str) -> str:
-    """Check complaint status from database"""
-    if not supabase:
-        return "❌ Database not available"
-    
-    response = supabase.table('complaints').select(
-        'id, status, category_pred, severity_pred, created_at'
-    ).eq('id', complaint_id).single().execute()
-    
-    if not response.data:
-        return "❌ Complaint not found."
-    
-    data = response.data
-    return f"""📋 *Complaint Status*
 
-🆔 `{data['id']}`
-📊 Status: *{data['status']}*
-📂 Category: {data.get('category_pred') or 'Processing...'}
-⚡ Severity: {data.get('severity_pred') or '?'}/5
-📅 Submitted: {data['created_at'][:10]}"""
+def call_review_agent(messages: List[Dict[str, str]]) -> str:
+    token = get_valid_token()
+    url = f"{WXO_HOST_URL}/instances/{WXO_INSTANCE_ID}/v1/orchestrate/{WXO_AGENT_ID}/chat/completions"
 
-def get_user_complaints(telegram_user_id: str) -> str:
-    """Get user's recent complaints"""
-    if not supabase:
-        return "❌ Database not available"
-    
-    response = supabase.table('complaints').select(
-        'id, text, status, created_at'
-    ).eq('telegram_user_id', telegram_user_id).order(
-        'created_at', desc=True
-    ).limit(5).execute()
-    
-    if not response.data:
-        return "You have no complaints on record."
-    
-    message = "📋 *Your Recent Complaints*\n\n"
-    for i, c in enumerate(response.data, 1):
-        text_preview = c['text'][:50] + '...' if len(c['text']) > 50 else c['text']
-        message += f"{i}. {text_preview}\n"
-        message += f"   🆔 `{c['id'][:8]}` | {c['status']}\n\n"
-    
-    return message
-
-@app.route('/')
-def health():
-    """Health check endpoint"""
-    return jsonify({
-        "status": "ok",
-        "service": "IBeLulu Telegram Bot",
-        "watson_configured": jwt_generator is not None,
-        "supabase_configured": supabase is not None,
-        "debug": {
-            "has_telegram_token": TELEGRAM_BOT_TOKEN is not None,
-            "has_supabase_url": SUPABASE_URL is not None,
-            "has_supabase_key": SUPABASE_SERVICE_ROLE_KEY is not None,
-            "supabase_url_value": SUPABASE_URL[:30] + "..." if SUPABASE_URL else None
+    api_messages = [
+        {
+            'role': msg['role'],
+            'content': [{'response_type': 'text', 'text': msg['text']}],
         }
-    })
+        for msg in messages
+    ]
 
-@app.route('/webhook', methods=['POST'])
-def telegram_webhook():
-    """Handle incoming Telegram webhook updates"""
+    data = http_request(
+        url,
+        method='POST',
+        headers={
+            'Authorization': f'Bearer {token}',
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+        },
+        body={
+            'stream': False,
+            'messages': api_messages,
+        },
+    )
+
+    choices = data.get('choices') or []
+    if choices:
+        message = choices[0].get('message') or {}
+        content = message.get('content')
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list) and content:
+            first = content[0]
+            if isinstance(first, dict) and 'text' in first:
+                return str(first['text'])
+
+    return 'No response text received from agent.'
+
+
+def build_history(user_id: int, user_text: str) -> List[Dict[str, str]]:
+    history = history_by_user.get(user_id, [])
+    history.append({'role': 'user', 'text': user_text})
+    history = history[-MAX_HISTORY:]
+    history_by_user[user_id] = history
+    return history
+
+
+def store_assistant_reply(user_id: int, reply_text: str) -> None:
+    history = history_by_user.get(user_id, [])
+    history.append({'role': 'assistant', 'text': reply_text})
+    history_by_user[user_id] = history[-MAX_HISTORY:]
+
+
+def send_telegram_message(chat_id: int, text: str) -> None:
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    http_request(
+        url,
+        method='POST',
+        headers={'Content-Type': 'application/json'},
+        body={'chat_id': chat_id, 'text': text},
+    )
+
+
+def handle_update(update: dict) -> None:
+    message = update.get('message') or update.get('edited_message')
+    if not message:
+        return
+
+    chat = message.get('chat') or {}
+    chat_id = chat.get('id')
+    if not chat_id:
+        return
+
+    text = message.get('text') or ''
+    if not text:
+        return
+
+    if text.strip().lower() == '/start':
+        send_telegram_message(chat_id, "Hello! Tell me about the issue and I'll file a report.")
+        return
+
     try:
-        update = request.get_json()
-        
-        if 'message' not in update:
-            return jsonify({"status": "ok"})
-        
-        message = update['message']
-        chat_id = message['chat']['id']
-        message_id = message['message_id']
-        user_id = message['from']['id']
-        username = message['from'].get('username', 'anonymous')
-        text = message.get('text') or message.get('caption') or ''
-        
-        logger.info(f"📩 Message from {username} ({user_id}): {text[:50]}")
-        
-        # /start command
-        if text.startswith('/start'):
-            send_telegram_message(chat_id,
-                "👋 *Welcome to Lulu Town Council Bot!*\n\n"
-                "📝 Send me your complaint with location\n"
-                "🔍 /status <ID> - Check complaint\n"
-                "📋 /mycomplaints - Your history\n"
-                "❓ /help - Show help",
-                message_id
-            )
-            return jsonify({"status": "ok"})
-        
-        # /help command
-        if text.startswith('/help'):
-            send_telegram_message(chat_id,
-                "🆘 *Help & Commands*\n\n"
-                "*Submit:* Just type your complaint\n"
-                "*Check:* /status <ID>\n"
-                "*History:* /mycomplaints\n\n"
-                "✅ Include location\n"
-                "✅ Be specific\n\n"
-                "Urgent? Call 6123-4567",
-                message_id
-            )
-            return jsonify({"status": "ok"})
-        
-        # /status command
-        if text.startswith('/status'):
-            parts = text.split(' ')
-            if len(parts) < 2:
-                send_telegram_message(chat_id, "⚠️ Usage: `/status <complaint_id>`", message_id)
-            else:
-                status_msg = check_complaint_status(parts[1])
-                send_telegram_message(chat_id, status_msg, message_id)
-            return jsonify({"status": "ok"})
-        
-        # /mycomplaints command
-        if text.startswith('/mycomplaints'):
-            complaints = get_user_complaints(str(user_id))
-            send_telegram_message(chat_id, complaints, message_id)
-            return jsonify({"status": "ok"})
-        
-        # Submit complaint (any text or /complain)
-        if text.startswith('/complain') or not text.startswith('/'):
-            complaint_text = text.replace('/complain', '').strip()
-            
-            if not complaint_text:
-                send_telegram_message(chat_id, "📝 Please describe your complaint.", message_id)
-                return jsonify({"status": "ok"})
-            
-            try:
-                send_telegram_message(chat_id, "⏳ Processing...", message_id)
-                
-                # Generate JWT and send to Watson
-                jwt = get_watson_jwt(str(user_id), username)
-                watson_response = send_to_watson_agent(jwt, complaint_text)
-                
-                # Extract response
-                choices = watson_response.get('choices', [])
-                response_text = "✅ *Complaint Submitted!*\n\n"
-                
-                if choices and choices[0].get('message', {}).get('content'):
-                    response_text += choices[0]['message']['content'] + "\n\n"
-                
-                response_text += "Submitted to Lulu Town Council.\n\n📱 /status <id>\n📋 /mycomplaints\n\nThank you! 🌟"
-                
-                send_telegram_message(chat_id, response_text, message_id)
-                
-            except Exception as e:
-                logger.error(f"❌ Complaint error: {e}")
-                
-                # Queue failed message
-                queue_failed_message(str(user_id), str(chat_id), complaint_text, str(e))
-                
-                send_telegram_message(chat_id,
-                    f"⚠️ *Error*\n\n{str(e)}\n\nYour complaint has been queued. Urgent? Call 6123-4567.",
-                    message_id
-                )
-            
-            return jsonify({"status": "ok"})
-        
-        return jsonify({"status": "ok"})
-        
-    except Exception as e:
-        logger.error(f"❌ Webhook error: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 200
+        history = build_history(chat_id, text)
+        reply = call_review_agent(history)
+        store_assistant_reply(chat_id, reply)
+        send_telegram_message(chat_id, reply)
+    except Exception as exc:
+        log(f'Error handling message: {exc}')
+        send_telegram_message(chat_id, "Sorry, I'm having trouble processing that right now.")
 
-@app.route('/set-webhook', methods=['GET'])
-def set_webhook():
-    """Helper endpoint to set Telegram webhook"""
-    webhook_url = request.args.get('url')
-    if not webhook_url:
-        return jsonify({"error": "Missing 'url' parameter"}), 400
-    
-    telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook"
-    response = requests.post(telegram_url, json={"url": f"{webhook_url}/webhook"})
-    return jsonify(response.json())
+
+def main() -> None:
+    if not TELEGRAM_BOT_TOKEN:
+        raise RuntimeError('Missing TELEGRAM_BOT_TOKEN in .env.local or environment.')
+
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        raise RuntimeError('Missing SUPABASE_URL or SUPABASE_ANON_KEY in environment.')
+
+    log('Starting Telegram bot long-polling...')
+    offset = 0
+    while True:
+        try:
+            updates_url = (
+                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
+                f"?timeout={POLL_TIMEOUT}&offset={offset}"
+            )
+            data = http_request(updates_url, method='GET')
+            results = data.get('result') or []
+            for update in results:
+                update_id = update.get('update_id', 0)
+                offset = max(offset, update_id + 1)
+                handle_update(update)
+        except Exception as exc:
+            log(f'Polling error: {exc}')
+            time.sleep(2)
+
 
 if __name__ == '__main__':
-    init_clients()
-    port = int(os.environ.get('PORT', 5000))
-    logger.info(f"🚀 Starting server on port {port}")
-    app.run(host='0.0.0.0', port=port, debug=False)
+    main()
