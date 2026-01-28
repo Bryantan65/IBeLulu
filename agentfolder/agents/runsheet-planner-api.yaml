@@ -1,11 +1,11 @@
 openapi: 3.0.0
 info:
-  title: Town Council Scheduling API
-  description: API for generating and managing run sheets and team schedules
+  title: Run Sheet Planner API
+  description: API for planning and creating optimized run sheets
   version: 1.0.0
 servers:
   - url: https://gsbpchneovtpqgnyfttp.supabase.co/functions/v1
-    description: Supabase Edge Functions
+    description: Supabase Edge Functions - Run Sheet Planner
 
 paths:
   /create-tasks-from-clusters:
@@ -40,29 +40,26 @@ paths:
     get:
       operationId: get_pending_tasks
       summary: Get pending approved tasks
-      description: Retrieve all approved tasks that need to be scheduled into run sheets
+      description: Retrieve all approved tasks that need to be scheduled into run sheets. Use this to see what work needs to be planned. All parameters are optional - omit them to get all tasks.
       parameters:
         - name: status
           in: query
-          description: Filter by task status (approved, pending_schedule, or scheduled). Leave empty to get all.
+          description: Filter by task status (approved, pending_schedule, or scheduled). Omit this parameter to get all statuses.
           required: false
           schema:
             type: string
-            nullable: true
         - name: priority
           in: query
-          description: Filter by priority level (today, 48h, week, or proactive). Leave empty to get all.
+          description: Filter by priority level (today, 48h, week, or proactive). Omit this parameter to get all priorities.
           required: false
           schema:
             type: string
-            nullable: true
         - name: zone
           in: query
-          description: Filter by zone/area. Leave empty to get all.
+          description: Filter by zone/area. Omit this parameter to get all zones.
           required: false
           schema:
             type: string
-            nullable: true
       responses:
         '200':
           description: List of pending tasks
@@ -106,20 +103,18 @@ paths:
     get:
       operationId: get_team_availability
       summary: Get team availability
-      description: Retrieve available teams and their capacity for scheduling. Defaults to today's date and AM window if not specified.
+      description: Retrieve available teams and their capacity for scheduling. Defaults to today's date and AM window if not specified. Use this to determine how many tasks each team can handle.
       parameters:
         - name: date
           in: query
-          description: Date to check availability in format YYYY-MM-DD (e.g., 2026-01-28)
+          description: Date to check availability in format YYYY-MM-DD (e.g., 2026-01-28). Omit this parameter to default to today.
           required: false
-          allowEmptyValue: true
           schema:
             type: string
         - name: window
           in: query
-          description: Time window, either AM or PM
+          description: Time window, either AM or PM. Omit this parameter to default to AM.
           required: false
-          allowEmptyValue: true
           schema:
             type: string
       responses:
@@ -165,8 +160,8 @@ paths:
   /create-run-sheet:
     post:
       operationId: create_run_sheet
-      summary: Create a new run sheet
-      description: Generate and save an optimized run sheet for a team
+      summary: Create a new draft run sheet
+      description: Generate and save an optimized draft run sheet for a team. The run sheet will be created with status 'draft' for supervisor review before dispatch.
       requestBody:
         required: true
         content:
@@ -181,31 +176,34 @@ paths:
               properties:
                 team_id:
                   type: string
-                  description: Team assigned to this run sheet
-                  example: "team-alpha"
+                  description: UUID of the team assigned to this run sheet
+                  example: "47cab873-a26f-4380-9586-823885fdc49f"
                 date:
                   type: string
                   format: date
-                  description: Date for the run sheet
-                  example: "2026-01-27"
+                  description: Date for the run sheet in YYYY-MM-DD format
+                  example: "2026-01-28"
                 time_window:
                   type: string
                   description: Time window (AM or PM)
+                  enum: ["AM", "PM"]
                   example: "AM"
                 task_ids:
                   type: array
-                  description: Ordered list of task IDs
+                  description: Ordered list of task UUIDs to include in the run sheet
                   items:
                     type: string
-                  example: ["task-1", "task-2", "task-3"]
+                  example: ["a1000001-0000-0000-0000-000000000001", "a1000001-0000-0000-0000-000000000002"]
                 zones_covered:
                   type: array
-                  description: List of zones covered
+                  description: List of zones covered by this run sheet
                   items:
                     type: string
+                  example: ["Ang Mo Kio", "Bishan"]
                 notes:
                   type: string
-                  description: Additional notes for the team
+                  description: Planning notes or special instructions
+                  example: "Prioritize drain tasks due to rain forecast"
       responses:
         '200':
           description: Run sheet created successfully
@@ -223,9 +221,11 @@ paths:
                   capacity_used_percent:
                     type: number
         '400':
-          description: Bad request
+          description: Bad request - invalid parameters or team capacity exceeded
         '401':
           description: Unauthorized
+        '409':
+          description: Run sheet already exists for this team/date/window
         '500':
           description: Server error
 
@@ -233,27 +233,28 @@ paths:
     get:
       operationId: get_run_sheets
       summary: Get run sheets
-      description: Retrieve run sheets by date, team, or status
+      description: Retrieve run sheets by date, team, or status. Use status='draft' to see run sheets ready for review.
       parameters:
         - name: date
           in: query
-          description: Filter by date (YYYY-MM-DD)
+          description: Filter by date (YYYY-MM-DD). Omit to get all dates.
           required: false
           schema:
             type: string
             format: date
         - name: team_id
           in: query
-          description: Filter by team
+          description: Filter by team UUID. Omit to get all teams.
           required: false
           schema:
             type: string
         - name: status
           in: query
-          description: Filter by status (draft, dispatched, in_progress, or completed)
+          description: Filter by status (draft, dispatched, in_progress, or completed). Omit to get all statuses.
           required: false
           schema:
             type: string
+            enum: ["draft", "dispatched", "in_progress", "completed"]
       responses:
         '200':
           description: List of run sheets
@@ -289,57 +290,10 @@ paths:
                           type: array
                           items:
                             type: string
+                        capacity_used_percent:
+                          type: number
         '401':
           description: Unauthorized
-        '500':
-          description: Server error
-
-  /dispatch-run-sheet:
-    post:
-      operationId: dispatch_run_sheet
-      summary: Dispatch a run sheet
-      description: Send run sheet to ops channel and notify team
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - run_sheet_id
-              properties:
-                run_sheet_id:
-                  type: string
-                  description: ID of the run sheet to dispatch
-                notify_channel:
-                  type: boolean
-                  description: Send notification to ops channel
-                  default: true
-                notify_team:
-                  type: boolean
-                  description: Send notification to team members
-                  default: true
-      responses:
-        '200':
-          description: Run sheet dispatched successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                  message:
-                    type: string
-                  dispatched_at:
-                    type: string
-                    format: date-time
-        '400':
-          description: Bad request
-        '401':
-          description: Unauthorized
-        '404':
-          description: Run sheet not found
         '500':
           description: Server error
 

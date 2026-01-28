@@ -1,0 +1,173 @@
+openapi: 3.0.0
+info:
+  title: Dispatch Coordinator API
+  description: API for dispatching and monitoring run sheets
+  version: 1.0.0
+servers:
+  - url: https://gsbpchneovtpqgnyfttp.supabase.co/functions/v1
+    description: Supabase Edge Functions - Dispatch Coordinator
+
+paths:
+  /get-run-sheets:
+    get:
+      operationId: get_run_sheets
+      summary: Get run sheets
+      description: Retrieve run sheets by date, team, or status. Use this to review draft run sheets, monitor dispatched sheets, or check completion status.
+      parameters:
+        - name: date
+          in: query
+          description: Filter by date (YYYY-MM-DD). Omit to get all dates.
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: team_id
+          in: query
+          description: Filter by team UUID. Omit to get all teams.
+          required: false
+          schema:
+            type: string
+        - name: team_name
+          in: query
+          description: Filter by team name (e.g., 'Team Alpha'). Omit to get all teams.
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Filter by status. Use 'draft' to see sheets ready for dispatch, 'dispatched' or 'in_progress' for active operations. Omit to get all statuses.
+          required: false
+          schema:
+            type: string
+            enum: ["draft", "dispatched", "in_progress", "completed"]
+        - name: window
+          in: query
+          description: Filter by time window (AM or PM). Omit to get all time windows.
+          required: false
+          schema:
+            type: string
+            enum: ["AM", "PM"]
+      responses:
+        '200':
+          description: List of run sheets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  run_sheets:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        run_sheet_id:
+                          type: string
+                        team_id:
+                          type: string
+                        team_name:
+                          type: string
+                        date:
+                          type: string
+                        window:
+                          type: string
+                        status:
+                          type: string
+                        total_tasks:
+                          type: integer
+                        completed_tasks:
+                          type: integer
+                        zones_covered:
+                          type: array
+                          items:
+                            type: string
+                        capacity_used_percent:
+                          type: number
+                        dispatched_at:
+                          type: string
+                          format: date-time
+                          nullable: true
+                        notes:
+                          type: string
+                          nullable: true
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+  /dispatch-run-sheet:
+    post:
+      operationId: dispatch_run_sheet
+      summary: Dispatch a run sheet to field team
+      description: |
+        Send run sheet to ops channel and notify the assigned team. This changes the run sheet 
+        status from 'draft' to 'dispatched' and locks it from further editing. The team will 
+        receive notifications about their assigned tasks.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - run_sheet_id
+              properties:
+                run_sheet_id:
+                  type: string
+                  description: UUID of the run sheet to dispatch
+                  example: "573ba761-39c6-47f9-907d-8134a3597048"
+                notify_team:
+                  type: boolean
+                  description: Send notification to team members (Telegram/SMS)
+                  default: true
+                dispatch_notes:
+                  type: string
+                  description: Special instructions for the field team
+                  example: "Priority on drain tasks due to rain forecast. Equipment needed for Task #3."
+      responses:
+        '200':
+          description: Run sheet dispatched successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                    example: "Run sheet dispatched to Team Alpha"
+                  run_sheet:
+                    type: object
+                    description: Updated run sheet details
+                  notification:
+                    type: object
+                    properties:
+                      sent:
+                        type: boolean
+                      payload:
+                        type: object
+                  dispatched_at:
+                    type: string
+                    format: date-time
+        '400':
+          description: Bad request - run sheet is empty or already completed
+        '401':
+          description: Unauthorized
+        '404':
+          description: Run sheet not found
+        '409':
+          description: Run sheet has already been dispatched
+        '500':
+          description: Server error
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - BearerAuth: []
