@@ -113,6 +113,32 @@ serve(async (req) => {
             // Don't fail the request - tasks were created successfully
         }
 
+        // Log task creation to audit_log
+        try {
+            await supabaseClient
+                .from('audit_log')
+                .insert({
+                    action: 'TASK_CREATION',
+                    entity_type: 'tasks',
+                    entity_id: createdTasks?.[0]?.id || null,
+                    agent_name: 'RunSheetPlannerAgent',
+                    inputs_summary: {
+                        cluster_count: clustersNeedingTasks.length,
+                        cluster_ids: body.cluster_ids || 'all_reviewed'
+                    },
+                    outputs_summary: {
+                        tasks_created: createdTasks?.length || 0,
+                        clusters_processed: clustersNeedingTasks.map(c => ({
+                            cluster_id: c.id,
+                            category: c.category,
+                            zone: c.zone_id
+                        }))
+                    }
+                })
+        } catch (auditError) {
+            console.warn('Failed to log to audit_log:', auditError)
+        }
+
         return new Response(
             JSON.stringify({
                 success: true,
