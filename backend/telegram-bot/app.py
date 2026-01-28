@@ -4,16 +4,6 @@ Hosted on Railway - handles webhook and Watson integration
 """
 
 import os
-import logging
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import requests
-from supabase import create_client, Client
-from jwt_generator import WatsonJWTGenerator
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 CORS(app)
@@ -32,14 +22,6 @@ IBM_PUBLIC_KEY = os.environ.get('IBM_PUBLIC_KEY')
 supabase: Client = None
 jwt_generator: WatsonJWTGenerator = None
 
-def init_clients():
-    """Initialize Supabase and JWT generator"""
-    global supabase, jwt_generator
-    
-    if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
-        logger.info(f"SUPABASE_URL: {SUPABASE_URL[:30]}... (len={len(SUPABASE_URL)})")
-        logger.info(f"SUPABASE_SERVICE_ROLE_KEY: {SUPABASE_SERVICE_ROLE_KEY[:5]}...{SUPABASE_SERVICE_ROLE_KEY[-5:]} (len={len(SUPABASE_SERVICE_ROLE_KEY)})")
-        try:
             supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
             logger.info("✅ Supabase client initialized")
         except Exception as e:
@@ -59,6 +41,9 @@ def send_telegram_message(chat_id: int, text: str, reply_to_message_id: int = No
         "chat_id": chat_id,
         "text": text,
         "parse_mode": "Markdown"
+
+# Ensure clients are initialized at startup
+init_clients()
     }
     if reply_to_message_id:
         payload["reply_to_message_id"] = reply_to_message_id
