@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Badge, Card, Button } from '../components/ui'
-import { MapPin, AlertTriangle, Shield, ClipboardCheck, X, Loader2, Clock, CheckCircle, RefreshCw } from 'lucide-react'
+import { MapPin, AlertTriangle, ClipboardCheck, RefreshCw, Shield, X, Loader2, Clock, CheckCircle } from 'lucide-react'
 import { sendMessageToAgent, ChatMessage } from '../services/orchestrate'
 import './Hotspots.css'
-
 
 const REVIEW_AGENT_ID = 'f3c41796-118f-4f5a-a77c-e29890eaca6e'
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -37,6 +37,45 @@ interface ClusterReview {
     description?: string
 }
 
+function extractJsonArray(text: string): string | null {
+    const start = text.indexOf('[')
+    if (start === -1) return null
+
+    let depth = 0
+    let inString = false
+    let escape = false
+
+    for (let i = start; i < text.length; i++) {
+        const ch = text[i]
+
+        if (inString) {
+            if (escape) {
+                escape = false
+            } else if (ch === '\\') {
+                escape = true
+            } else if (ch === '"') {
+                inString = false
+            }
+            continue
+        }
+
+        if (ch === '"') {
+            inString = true
+            continue
+        }
+
+        if (ch === '[') depth += 1
+        if (ch === ']') {
+            depth -= 1
+            if (depth === 0) {
+                return text.slice(start, i + 1)
+            }
+        }
+    }
+
+    return null
+}
+
 function getTimeAgo(dateString: string): string {
     const now = new Date()
     const date = new Date(dateString)
@@ -56,6 +95,7 @@ function getTimeAgo(dateString: string): string {
 }
 
 export default function Hotspots() {
+    const navigate = useNavigate()
     const [clusters, setClusters] = useState<Cluster[]>([])
     const [loading, setLoading] = useState(true)
     const [showReviewModal, setShowReviewModal] = useState(false)
@@ -94,7 +134,6 @@ export default function Hotspots() {
         setReviewError('')
 
         try {
-            // Step 1: Fetch triaged clusters directly from Supabase
             const clusterResponse = await fetch(
                 `${SUPABASE_URL}/rest/v1/clusters?select=id,category,severity_score,zone_id,created_at,recurrence_count,priority_score,assigned_playbook,requires_human_review,last_action_at,description,complaint_count&state=eq.TRIAGED&order=priority_score.desc.nullslast,severity_score.desc,created_at.asc`,
                 {
@@ -117,7 +156,6 @@ export default function Hotspots() {
                 return
             }
 
-            // Step 2: Pass data to agent for analysis
             const reviewMessage: ChatMessage = {
                 role: 'user',
                 text: `Analyze and rank these ${clustersWithCounts.length} triaged complaint clusters. Return ONLY a raw JSON array (no markdown, no backticks) with your recommendations.
@@ -141,8 +179,17 @@ NO markdown formatting. NO backticks. ONLY the JSON array.`
             const responseText = await sendMessageToAgent([reviewMessage], REVIEW_AGENT_ID)
 
             try {
-                const jsonString = responseText.replace(/```json/g, '').replace(/```/g, '').trim()
-                const data = JSON.parse(jsonString)
+                const cleaned = responseText.replace(/```json/g, '').replace(/```/g, '').trim()
+                let jsonPayload = cleaned
+                try {
+                    JSON.parse(jsonPayload)
+                } catch {
+                    const extracted = extractJsonArray(cleaned)
+                    if (!extracted) throw new Error('No JSON array found in agent response')
+                    jsonPayload = extracted
+                }
+
+                const data = JSON.parse(jsonPayload)
                 if (Array.isArray(data)) {
                     data.sort((a: any, b: any) => (b.priority_score || b.severity_score || 0) - (a.priority_score || a.severity_score || 0))
                     setReviewData(data)
@@ -151,7 +198,7 @@ NO markdown formatting. NO backticks. ONLY the JSON array.`
                 }
             } catch (e) {
                 console.error("Failed to parse agent response as JSON", e)
-                setReviewError(responseText)
+                setReviewError(`Unable to parse agent response. Raw output:\n\n${responseText}`)
             }
 
         } catch (error) {
@@ -191,9 +238,7 @@ NO markdown formatting. NO backticks. ONLY the JSON array.`
                 throw new Error(`Failed to approve cluster: ${response.statusText}`)
             }
 
-            // Remove approved cluster from review list
             setReviewData(prev => prev.filter(c => c.id !== cluster.id))
-            // Refresh main cluster list
             fetchClusters()
 
         } catch (error) {
@@ -237,12 +282,20 @@ NO markdown formatting. NO backticks. ONLY the JSON array.`
                             Refresh
                         </Button>
                         <Button
-                            variant="secondary"
+                            variant="ghost"
                             size="sm"
                             icon={<ClipboardCheck size={14} />}
                             onClick={handleReviewClusters}
                         >
-                            Review
+                            Quick Review
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            icon={<ClipboardCheck size={14} />}
+                            onClick={() => navigate('/review')}
+                        >
+                            Review Queue
                         </Button>
                     </div>
                 </div>
