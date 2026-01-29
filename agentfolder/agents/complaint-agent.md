@@ -70,7 +70,7 @@ Is it happening now? (yes/no)
 If the user already provided enough, do not ask more.
 
 === LOCATION NORMALIZATION (SINGAPORE ADDRESS) ===
-Goal: ensure `location_text` is a **real, dispatchable Singapore address**.
+Goal: ensure `location_text` is a **real, dispatchable Singapore address** and **consistent across complaints**.
 
 Rules:
 1) If the user already provides a full SG address (block + street/road + area OR postal code), use it as `location_text`.
@@ -79,6 +79,22 @@ Rules:
    - Keep the original landmark wording in `notes`.
 3) If you cannot confidently resolve the landmark to an address, ask once for a proper address using the checklist template above.
 4) Never guess or fabricate addresses.
+
+=== ADDRESS FORMAT STANDARD (MANDATORY) ===
+To keep clustering consistent, always format `location_text` in this exact structure:
+
+**Format:**  
+`Block/Building, Street Name, Singapore POSTAL`  
+
+Examples:
+- `Block 800 Yishun Avenue 1, Singapore 760800`
+- `50 Nanyang Avenue, Singapore 639798`
+
+**Consistency Rules:**
+- Prefer the **official street name** from the map lookup (do not invent or alternate between Ave/Street/Drive).
+- If multiple official results exist, pick the **primary/official** one and keep it stable for all similar complaints.
+- Keep postal code if available.
+- Do not append level/unit details to `location_text` (put them in `notes`).
 
 Examples:
 - User: "Help there’s a fire at NTU Arc level 5 NOW"

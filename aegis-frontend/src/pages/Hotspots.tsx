@@ -113,8 +113,10 @@ const MAP_THEMES = {
     light: lightMapStyle,
 };
 
-function getMarkerIcon(severity: number) {
+function getMarkerIcon(severity: number, complaintCount: number) {
     const color = severity >= 4 ? '#ef4444' : severity >= 3 ? '#f59e0b' : '#10b981'
+    const count = Number.isFinite(complaintCount) ? complaintCount : 0
+    const scale = 6 + Math.min(12, Math.floor(count / 2)) + Math.max(0, Math.min(3, severity))
     const maps = (window as any).google?.maps
     if (!maps) return undefined
     return {
@@ -123,7 +125,7 @@ function getMarkerIcon(severity: number) {
         fillOpacity: 0.9,
         strokeColor: '#111827',
         strokeWeight: 1,
-        scale: 6 + Math.max(0, Math.min(3, severity))
+        scale
     }
 }
 
@@ -408,7 +410,7 @@ NO markdown formatting. NO backticks. ONLY the JSON array.`
                                                     key={c.id}
                                                     position={{ lat: c.lat, lng: c.lng }}
                                                     clusterer={clusterer}
-                                                    icon={getMarkerIcon(c.severity_score)}
+                                                    icon={getMarkerIcon(c.severity_score, c.complaint_count || 0)}
                                                     onClick={() => handleClusterClick(c.id, c.lat, c.lng)}
                                                 />
                                             ))}
