@@ -145,14 +145,160 @@ def store_assistant_reply(user_id: int, reply_text: str) -> None:
     history_by_user[user_id] = history[-MAX_HISTORY:]
 
 
-def send_telegram_message(chat_id: int, text: str) -> None:
+def send_telegram_message(chat_id: int, text: str, parse_mode: str = 'Markdown') -> None:
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     http_request(
         url,
         method='POST',
         headers={'Content-Type': 'application/json'},
-        body={'chat_id': chat_id, 'text': text},
+        body={'chat_id': chat_id, 'text': text, 'parse_mode': parse_mode},
     )
+
+
+def save_complaint_to_supabase(text: str, telegram_user_id: int, telegram_username: Optional[str]) -> Optional[str]:
+    """Save a complaint to the Supabase complaints table and return the complaint ID."""
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        log('Cannot save complaint: Missing Supabase configuration')
+        return None
+
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/complaints"
+        complaint_data = {
+            'text': text,
+            'telegram_user_id': str(telegram_user_id),
+            'telegram_username': telegram_username or 'anonymous',
+            'status': 'RECEIVED',
+            'confidence': 0.5,
+        }
+
+        response = http_request(
+            url,
+            method='POST',
+            headers={
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': f'Bearer {SUPABASE_ANON_KEY}',
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation',
+            },
+            body=complaint_data,
+        )
+
+        # Response should be a list with the created record
+        if isinstance(response, list) and len(response) > 0:
+            complaint_id = response[0].get('id')
+            log(f'Complaint saved to Supabase: {complaint_id}')
+            return complaint_id
+        elif isinstance(response, dict):
+            complaint_id = response.get('id')
+            if complaint_id:
+                log(f'Complaint saved to Supabase: {complaint_id}')
+                return complaint_id
+
+        log(f'Unexpected response format from Supabase: {response}')
+        return None
+    except Exception as exc:
+        log(f'Error saving complaint to Supabase: {exc}')
+        return None
+
+
+def check_complaint_status(complaint_id: str) -> str:
+    """Check the status of a complaint by ID."""
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        return '❌ Database not configured.'
+
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/complaints?id=eq.{complaint_id}&select=id,status,category_pred,severity_pred,created_at"
+        response = http_request(
+            url,
+            method='GET',
+            headers={
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': f'Bearer {SUPABASE_ANON_KEY}',
+            },
+        )
+
+        if isinstance(response, list) and len(response) > 0:
+            data = response[0]
+            created = data.get('created_at', '')
+            if created:
+                from datetime import datetime
+                dt = datetime.fromisoformat(created.replace('Z', '+00:00'))
+                created = dt.strftime('%Y-%m-%d')
+
+            return (
+                f"📋 *Complaint Status*\n\n"
+                f"🆔 `{data.get('id', 'N/A')}`\n"
+                f"📊 Status: *{data.get('status', 'N/A')}*\n"
+                f"📂 Category: {data.get('category_pred') or 'Processing...'}\n"
+                f"⚡ Severity: {data.get('severity_pred') or '?'}/5\n"
+                f"📅 Submitted: {created}"
+            )
+        return '❌ Complaint not found.'
+    except Exception as exc:
+        log(f'Error checking complaint status: {exc}')
+        return f'❌ Error: {exc}'
+
+
+def get_user_complaints(telegram_user_id: str) -> str:
+    """Get the recent complaints for a user."""
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        return '❌ Database not configured.'
+
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/complaints?telegram_user_id=eq.{telegram_user_id}&select=id,text,status,created_at&order=created_at.desc&limit=5"
+        response = http_request(
+            url,
+            method='GET',
+            headers={
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': f'Bearer {SUPABASE_ANON_KEY}',
+            },
+        )
+
+        if isinstance(response, list) and len(response) > 0:
+            message = '📋 *Your Recent Complaints*\n\n'
+            for i, complaint in enumerate(response, 1):
+                text_preview = complaint.get('text', '')[:50]
+                complaint_id = complaint.get('id', 'N/A')[:8]
+                status = complaint.get('status', 'N/A')
+                message += f"{i}. {text_preview}...\n"
+                message += f"   🆔 `{complaint_id}` | {status}\n\n"
+            return message
+        return 'You have no complaints on record.'
+    except Exception as exc:
+        log(f'Error getting user complaints: {exc}')
+        return f'❌ Error: {exc}'
+
+
+def queue_failed_message(telegram_user_id: str, chat_id: str, message_text: str, error_message: str) -> None:
+    """Queue a failed message for later retry."""
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        log('Cannot queue failed message: Missing Supabase configuration')
+        return
+
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/failed_messages"
+        failed_data = {
+            'telegram_user_id': telegram_user_id,
+            'telegram_chat_id': chat_id,
+            'message_text': message_text,
+            'error_message': error_message,
+            'status': 'pending',
+        }
+
+        http_request(
+            url,
+            method='POST',
+            headers={
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': f'Bearer {SUPABASE_ANON_KEY}',
+                'Content-Type': 'application/json',
+            },
+            body=failed_data,
+        )
+        log(f'Failed message queued for user {telegram_user_id}')
+    except Exception as exc:
+        log(f'Error queuing failed message: {exc}')
 
 
 def handle_update(update: dict) -> None:
@@ -165,22 +311,109 @@ def handle_update(update: dict) -> None:
     if not chat_id:
         return
 
+    # Extract user information
+    user = message.get('from') or {}
+    user_id = user.get('id')
+    username = user.get('username')
+
     text = message.get('text') or ''
     if not text:
         return
 
+    # Handle /start command
     if text.strip().lower() == '/start':
-        send_telegram_message(chat_id, "Hello! Tell me about the issue and I'll file a report.")
+        welcome_msg = (
+            "👋 *Welcome to Lulu Town Council Bot!*\n\n"
+            "📝 Send me your complaint with location\n"
+            "🔍 /status <ID> - Check complaint\n"
+            "📋 /mycomplaints - Your history\n"
+            "❓ /help - Show help"
+        )
+        send_telegram_message(chat_id, welcome_msg)
         return
 
+    # Handle /help command
+    if text.strip().lower() == '/help':
+        help_msg = (
+            "🆘 *Help & Commands*\n\n"
+            "*Submit:* Just type your complaint\n"
+            "*Check:* /status <ID>\n"
+            "*History:* /mycomplaints\n\n"
+            "✅ Include location\n"
+            "✅ Be specific\n\n"
+            "Urgent? Call 6123-4567"
+        )
+        send_telegram_message(chat_id, help_msg)
+        return
+
+    # Handle /status command
+    if text.strip().lower().startswith('/status'):
+        parts = text.split()
+        if len(parts) < 2:
+            send_telegram_message(chat_id, '⚠️ Usage: `/status <complaint_id>`')
+        else:
+            status_msg = check_complaint_status(parts[1])
+            send_telegram_message(chat_id, status_msg)
+        return
+
+    # Handle /mycomplaints command
+    if text.strip().lower() == '/mycomplaints':
+        if user_id:
+            complaints_msg = get_user_complaints(str(user_id))
+            send_telegram_message(chat_id, complaints_msg)
+        else:
+            send_telegram_message(chat_id, '❌ Unable to identify user.')
+        return
+
+    # Handle complaint submission (any other text)
     try:
+        send_telegram_message(chat_id, '⏳ Processing...')
+
         history = build_history(chat_id, text)
         reply = call_review_agent(history)
         store_assistant_reply(chat_id, reply)
-        send_telegram_message(chat_id, reply)
+
+        # Only save complaint if agent confirms it's ready to submit
+        # Check if agent's response indicates they need more info
+        reply_lower = reply.lower()
+        is_asking_questions = any(phrase in reply_lower for phrase in [
+            'need', 'tell me', 'where', 'when', 'what', 'how', 'please provide',
+            'can you', 'could you', 'more details', 'few more', 'i need'
+        ])
+
+        if is_asking_questions:
+            # Agent is asking for more information, don't save yet
+            send_telegram_message(chat_id, reply)
+        else:
+            # Agent has enough info, save the complaint
+            complaint_id = None
+            if user_id:
+                # Get the full conversation context for the complaint
+                full_context = '\n'.join([msg['text'] for msg in history if msg['role'] == 'user'])
+                complaint_id = save_complaint_to_supabase(full_context, user_id, username)
+
+            # Build response message
+            response_text = f"✅ *Complaint Submitted!*\n\n{reply}\n\n"
+
+            if complaint_id:
+                response_text += f"🆔 Complaint ID: `{complaint_id[:8]}`\n\n"
+
+            response_text += "📱 /status <id>\n📋 /mycomplaints\n\nThank you! 🌟"
+
+            send_telegram_message(chat_id, response_text)
+
     except Exception as exc:
         log(f'Error handling message: {exc}')
-        send_telegram_message(chat_id, "Sorry, I'm having trouble processing that right now.")
+
+        # Queue failed message for retry
+        if user_id:
+            queue_failed_message(str(user_id), str(chat_id), text, str(exc))
+
+        error_msg = (
+            f"⚠️ *Error*\n\n{str(exc)}\n\n"
+            "Your complaint has been queued. Urgent? Call 6123-4567."
+        )
+        send_telegram_message(chat_id, error_msg)
 
 
 def main() -> None:

@@ -208,3 +208,181 @@
 .text-primary {
     color: var(--color-primary);
 }
+
+/* Collapsible Chat */
+.tomorrow-plan-chat-collapsible {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 0;
+}
+
+.tomorrow-plan-chat-collapsible.open {
+    max-height: 600px;
+    /* Adjust based on your preferred chat height */
+    opacity: 1;
+    margin-bottom: var(--space-4);
+}
+
+/* Chatbot Modal Styles (Adapted from Complaints.css) */
+.tomorrow-plan-chat__container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.tomorrow-plan-chat__header {
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-surface-2);
+    border-bottom: 1px solid var(--color-divider);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.tomorrow-plan-chat__title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-weight: var(--font-semibold);
+    color: var(--color-text);
+}
+
+.tomorrow-plan-chat__close {
+    color: var(--color-text-muted);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: color var(--duration-fast);
+}
+
+.tomorrow-plan-chat__close:hover {
+    color: var(--color-text);
+}
+
+.tomorrow-plan-chat__messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    background: var(--color-surface-1);
+}
+
+.tomorrow-plan-chat__empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-muted);
+    gap: var(--space-3);
+    text-align: center;
+    opacity: 0.7;
+}
+
+.tomorrow-plan-chat__message {
+    display: flex;
+    gap: var(--space-2);
+    max-width: 80%;
+}
+
+.tomorrow-plan-chat__message--user {
+    align-self: flex-end;
+    flex-direction: row-reverse;
+}
+
+.tomorrow-plan-chat__message--assistant {
+    align-self: flex-start;
+}
+
+.tomorrow-plan-chat__avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-surface-2);
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.tomorrow-plan-chat__bubble {
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    line-height: 1.5;
+    position: relative;
+    white-space: pre-wrap;
+}
+
+.tomorrow-plan-chat__message--user .tomorrow-plan-chat__bubble {
+    background: var(--color-primary);
+    color: #ffffff;
+    border-bottom-right-radius: 2px;
+}
+
+.tomorrow-plan-chat__message--assistant .tomorrow-plan-chat__bubble {
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-bottom-left-radius: 2px;
+}
+
+.tomorrow-plan-chat__bubble--loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-2) var(--space-3);
+}
+
+.tomorrow-plan-chat__input-area {
+    padding: var(--space-3);
+    background: var(--color-surface-1);
+    border-top: 1px solid var(--color-divider);
+    display: flex;
+    gap: var(--space-2);
+}
+
+.tomorrow-plan-chat__input {
+    flex: 1;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
+    color: var(--color-text);
+    font-size: var(--text-sm);
+}
+
+.tomorrow-plan-chat__input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.tomorrow-plan-chat__input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.tomorrow-plan-chat__send-btn {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-primary);
+    color: #ffffff;
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: opacity var(--duration-fast);
+}
+
+.tomorrow-plan-chat__send-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

@@ -1,0 +1,40 @@
+openapi: 3.0.0
+info:
+  title: Forecast Agent Runner API
+  description: API for triggering the Forecast Agent to generate tomorrow's risk predictions
+  version: 1.0.3
+servers:
+  - url: https://gsbpchneovtpqgnyfttp.supabase.co/functions/v1
+    description: Supabase Edge Functions
+
+paths:
+  /forecast-agent-runner:
+    post:
+      operationId: generate_risk_forecast
+      summary: Generate Risk Forecast
+      description: Triggers the logic to fetch weather, analyze historical patterns, and generate risk predictions.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  nullable: true
+                  description: "Optional date (YYYY-MM-DD). If null/omitted, defaults to TOMORROW."
+      responses:
+        '200':
+          description: Successful forecast generation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  forecasts:
+                    type: array
+                    items:
+                      type: object
