@@ -1,4 +1,5 @@
 import { Button, Badge, Card } from '../components/ui'
+import ImageUpload from '../components/ui/ImageUpload'
 import { Check, RotateCcw, Flag, ZoomIn } from 'lucide-react'
 import './Evidence.css'
 
@@ -50,16 +51,24 @@ export default function Evidence() {
                         <div className="evidence__images">
                             <div className="evidence__image-container">
                                 <span className="evidence__image-label">Before</span>
-                                <div className="evidence__image evidence__image--placeholder">
-                                    <span>Before Photo</span>
-                                    <button className="evidence__zoom"><ZoomIn size={16} /></button>
+                                <div className="evidence__image">
+                                    <ImageUpload
+                                        label="Before Photo"
+                                        onUpload={async (file, uploadedUrl) => {
+                                            console.log('Selected before file for', item.id, file, uploadedUrl)
+                                        }}
+                                    />
                                 </div>
                             </div>
                             <div className="evidence__image-container">
                                 <span className="evidence__image-label">After</span>
-                                <div className="evidence__image evidence__image--placeholder">
-                                    <span>After Photo</span>
-                                    <button className="evidence__zoom"><ZoomIn size={16} /></button>
+                                <div className="evidence__image">
+                                    <ImageUpload
+                                        label="After Photo"
+                                        onUpload={async (file, uploadedUrl) => {
+                                            console.log('Selected evidence file for', item.id, file, uploadedUrl)
+                                        }}
+                                    />
                                 </div>
                             </div>
                         </div>

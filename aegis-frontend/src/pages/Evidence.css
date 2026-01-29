@@ -72,7 +72,6 @@
 }
 
 .evidence__image {
-    aspect-ratio: 4/3;
     background: var(--color-surface-2);
     border-radius: var(--radius-md);
     overflow: hidden;
