@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import { Button, Badge, Card } from '../components/ui'
-import { Download, Send, Calendar, Clock, Sparkles, Loader, RefreshCw, CheckCircle, ArrowRight } from 'lucide-react'
+import { Download, Send, Calendar, Clock, Sparkles, Loader, RefreshCw } from 'lucide-react'
 import { sendMessageToAgent, ChatMessage } from '../services/orchestrate'
 import './RunSheet.css'
 
@@ -53,8 +52,6 @@ interface GroupedRunSheets {
 }
 
 export default function RunSheet() {
-    const navigate = useNavigate()
-    const teamsRef = useRef<HTMLDivElement | null>(null)
     const [reviewedClusters, setReviewedClusters] = useState<Cluster[]>([])
     const [runSheets, setRunSheets] = useState<RunSheet[]>([])
     const [groupedSheets, setGroupedSheets] = useState<GroupedRunSheets>({})
@@ -65,6 +62,7 @@ export default function RunSheet() {
     const [dispatching, setDispatching] = useState<string | null>(null)
     const [dispatchResponse, setDispatchResponse] = useState<string>('')
     const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'dispatched' | 'in_progress' | 'completed'>('all')
+    const [activeView, setActiveView] = useState<'drafts' | 'all' | 'activity'>('drafts')
 
     useEffect(() => {
         fetchData()
@@ -163,6 +161,7 @@ export default function RunSheet() {
                     await new Promise(resolve => setTimeout(resolve, 2000))
                     await fetchData()
                     setStatusFilter('draft')
+                    setActiveView('drafts')
                     return // Success, exit function
                 } catch (error: any) {
                     lastError = error
@@ -183,17 +182,18 @@ export default function RunSheet() {
         } catch (error: any) {
             console.error('Error optimizing run sheets:', error)
             const errorMessage = error?.message || String(error)
-            setAgentResponse(`❌ Failed to optimize run sheets after multiple attempts.\n\nError: ${errorMessage}\n\nPlease try again. If the issue persists, check your network connection.`)
+            setAgentResponse(`Error: Failed to optimize run sheets after multiple attempts.\n\nError: ${errorMessage}\n\nPlease try again. If the issue persists, check your network connection.`)
         } finally {
             setOptimizing(false)
         }
     }
 
-    const handleShowDrafts = () => {
-        setStatusFilter('draft')
-        requestAnimationFrame(() => {
-            teamsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        })
+
+    const handleViewChange = (view: 'drafts' | 'all' | 'activity') => {
+        setActiveView(view)
+        if (view === 'all') {
+            setStatusFilter('all')
+        }
     }
 
     const handleDispatchRunSheet = async (sheet: RunSheet, teamName: string) => {
@@ -248,7 +248,7 @@ Provide dispatch confirmation and field instructions.`
             await fetchData()
         } catch (error) {
             console.error('Error dispatching run sheet:', error)
-            setDispatchResponse('❌ Failed to dispatch run sheet. Please try again.')
+            setDispatchResponse('Error: Failed to dispatch run sheet. Please try again.')
         } finally {
             setDispatching(null)
         }
@@ -258,7 +258,7 @@ Provide dispatch confirmation and field instructions.`
     const hasReviewedClusters = reviewedClusters.length > 0
     const hasRunSheets = runSheets.length > 0
     const hasDrafts = draftRunSheets.length > 0
-    const hasDispatched = runSheets.some(sheet => sheet.status !== 'draft')
+    const dispatchedCount = runSheets.filter(sheet => sheet.status !== 'draft').length
     const filteredRunSheets = statusFilter === 'all'
         ? runSheets
         : runSheets.filter(sheet => sheet.status === statusFilter)
@@ -307,232 +307,396 @@ Provide dispatch confirmation and field instructions.`
                 </div>
             </div>
 
-            {/* Workflow */}
-            <div className="runsheet__workflow">
-                <div className={`runsheet__workflow-step ${hasReviewedClusters ? 'runsheet__workflow-step--complete' : 'runsheet__workflow-step--active'}`}>
-                    <div className="runsheet__workflow-icon">
-                        {hasReviewedClusters ? <CheckCircle size={16} /> : <Sparkles size={16} />}
+            {/* Overview */}
+            <div className="runsheet__overview">
+                <div className="runsheet__summary-strip">
+                    <div className="runsheet__summary-card">
+                        <span>Reviewed clusters</span>
+                        <strong>{reviewedClusters.length}</strong>
+                        <small>{hasReviewedClusters ? 'Ready for planning' : 'Awaiting review'}</small>
                     </div>
-                    <div>
-                        <p>Reviewed clusters</p>
-                        <span>{hasReviewedClusters ? 'Ready for planning' : 'Waiting for review'}</span>
+                    <div className="runsheet__summary-card">
+                        <span>Draft run sheets</span>
+                        <strong>{draftRunSheets.length}</strong>
+                        <small>{hasDrafts ? 'Dispatch from Drafts view' : 'None yet'}</small>
                     </div>
-                </div>
-                <div className={`runsheet__workflow-step ${hasRunSheets ? 'runsheet__workflow-step--complete' : hasReviewedClusters ? 'runsheet__workflow-step--active' : ''}`}>
-                    <div className="runsheet__workflow-icon">
-                        {hasRunSheets ? <CheckCircle size={16} /> : <Sparkles size={16} />}
-                    </div>
-                    <div>
-                        <p>AI optimize</p>
-                        <span>{hasRunSheets ? 'Drafts created' : 'Generate run sheets'}</span>
-                    </div>
-                </div>
-                <div className={`runsheet__workflow-step ${hasDrafts ? 'runsheet__workflow-step--active' : hasRunSheets ? 'runsheet__workflow-step--complete' : ''}`}>
-                    <div className="runsheet__workflow-icon">
-                        {hasDrafts ? <Sparkles size={16} /> : <CheckCircle size={16} />}
-                    </div>
-                    <div>
-                        <p>Review drafts</p>
-                        <span>{hasDrafts ? 'Dispatch from here' : hasRunSheets ? 'No drafts' : 'Pending'}</span>
+                    <div className="runsheet__summary-card">
+                        <span>Dispatched today</span>
+                        <strong>{dispatchedCount}</strong>
+                        <small>{hasRunSheets ? 'Sent to field' : 'No dispatches yet'}</small>
                     </div>
                 </div>
-                <div className={`runsheet__workflow-step ${hasDispatched ? 'runsheet__workflow-step--complete' : hasDrafts ? 'runsheet__workflow-step--active' : ''}`}>
-                    <div className="runsheet__workflow-icon">
-                        {hasDispatched ? <CheckCircle size={16} /> : <Send size={16} />}
-                    </div>
-                    <div>
-                        <p>Dispatch</p>
-                        <span>{hasDispatched ? 'Sent to field' : 'Waiting to dispatch'}</span>
-                    </div>
+                <div className="runsheet__view-toggle">
+                    <button
+                        className={`runsheet__view-btn ${activeView === 'drafts' ? 'runsheet__view-btn--active' : ''}`}
+                        onClick={() => handleViewChange('drafts')}
+                    >
+                        Drafts
+                        {hasDrafts && <Badge variant="warning" size="sm">{draftRunSheets.length}</Badge>}
+                    </button>
+                    <button
+                        className={`runsheet__view-btn ${activeView === 'all' ? 'runsheet__view-btn--active' : ''}`}
+                        onClick={() => handleViewChange('all')}
+                    >
+                        All run sheets
+                    </button>
+                    <button
+                        className={`runsheet__view-btn ${activeView === 'activity' ? 'runsheet__view-btn--active' : ''}`}
+                        onClick={() => handleViewChange('activity')}
+                    >
+                        AI log
+                    </button>
                 </div>
             </div>
 
-            {/* Info Banner */}
-            {reviewedClusters.length > 0 && (
-                <Card className="runsheet__info-banner">
-                    <div className="runsheet__info-banner-content">
-                        <p>📋 <strong>{reviewedClusters.length}</strong> reviewed clusters ready for scheduling</p>
-                        <Button
-                            size="sm"
-                            variant="secondary"
-                            icon={optimizing ? <Loader size={14} className="spinner" /> : <Sparkles size={14} />}
-                            onClick={handleOptimizeRunSheets}
-                            disabled={optimizing || reviewedClusters.length === 0}
-                        >
-                            {optimizing ? 'Optimizing...' : 'Optimize now'}
-                        </Button>
-                    </div>
-                </Card>
-            )}
+            {activeView === 'drafts' && (
+                <div className="runsheet__panel">
+                    {hasReviewedClusters && (
+                        <Card className="runsheet__info-banner">
+                            <div className="runsheet__info-banner-content">
+                                <p><strong>{reviewedClusters.length}</strong> reviewed clusters ready for scheduling</p>
+                                <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    icon={optimizing ? <Loader size={14} className="spinner" /> : <Sparkles size={14} />}
+                                    onClick={handleOptimizeRunSheets}
+                                    disabled={optimizing || reviewedClusters.length === 0}
+                                >
+                                    {optimizing ? 'Optimizing...' : 'Optimize now'}
+                                </Button>
+                            </div>
+                        </Card>
+                    )}
 
-            {/* Drafts Banner */}
-            {hasDrafts && (
-                <Card className="runsheet__drafts-banner">
-                    <div className="runsheet__drafts-header">
-                        <div>
-                            <h4>Draft run sheets ready</h4>
-                            <p>{draftRunSheets.length} draft{draftRunSheets.length !== 1 ? 's' : ''} waiting for dispatch. Review and send below.</p>
+                    {hasDrafts ? (
+                        <div className="runsheet__drafts-grid">
+                            {draftRunSheets.map((sheet) => {
+                                const teamName = sheet.teams?.name || 'Unknown Team'
+                                return (
+                                    <div key={sheet.id} className="runsheet__draft-card">
+                                        <div className="runsheet__draft-card-header">
+                                            <span className="runsheet__draft-card-team">{teamName}</span>
+                                            <Badge variant="warning" size="sm">Draft</Badge>
+                                        </div>
+                                        <div className="runsheet__draft-card-meta">
+                                            <span>{sheet.time_window} window</span>
+                                            <span>{sheet.run_sheet_tasks?.length || 0} tasks</span>
+                                            <span>{sheet.capacity_used_percent}% capacity</span>
+                                        </div>
+                                        <div className="runsheet__draft-card-zones">
+                                            {sheet.zones_covered?.join(', ') || 'No zones'}
+                                        </div>
+                                        <Button
+                                            variant="primary"
+                                            size="sm"
+                                            icon={dispatching === sheet.id ? <Loader size={14} className="spinner" /> : <Send size={14} />}
+                                            onClick={() => handleDispatchRunSheet(sheet, teamName)}
+                                            disabled={dispatching === sheet.id}
+                                        >
+                                            {dispatching === sheet.id ? 'Dispatching...' : 'Dispatch now'}
+                                        </Button>
+                                    </div>
+                                )
+                            })}
                         </div>
-                        <div className="runsheet__drafts-actions">
-                            <Button variant="primary" size="sm" icon={<ArrowRight size={14} />} onClick={handleShowDrafts}>
-                                Review drafts
-                            </Button>
-                            <Button variant="ghost" size="sm" onClick={() => navigate('/review')}>
-                                Open review queue
-                            </Button>
-                        </div>
-                    </div>
-                    <div className="runsheet__drafts-grid">
-                        {draftRunSheets.slice(0, 3).map((sheet) => {
-                            const teamName = sheet.teams?.name || 'Unknown Team'
-                            return (
-                                <div key={sheet.id} className="runsheet__draft-card">
-                                    <div className="runsheet__draft-card-header">
-                                        <span className="runsheet__draft-card-team">{teamName}</span>
-                                        <Badge variant="warning" size="sm">Draft</Badge>
-                                    </div>
-                                    <div className="runsheet__draft-card-meta">
-                                        <span>{sheet.time_window} window</span>
-                                        <span>{sheet.run_sheet_tasks?.length || 0} tasks</span>
-                                        <span>{sheet.capacity_used_percent}% capacity</span>
-                                    </div>
-                                    <div className="runsheet__draft-card-zones">
-                                        {sheet.zones_covered?.join(', ') || 'No zones'}
-                                    </div>
-                                    <Button
-                                        variant="primary"
-                                        size="sm"
-                                        icon={dispatching === sheet.id ? <Loader size={14} className="spinner" /> : <Send size={14} />}
-                                        onClick={() => handleDispatchRunSheet(sheet, teamName)}
-                                        disabled={dispatching === sheet.id}
-                                    >
-                                        {dispatching === sheet.id ? 'Dispatching...' : 'Dispatch now'}
-                                    </Button>
-                                </div>
-                            )
-                        })}
-                        {draftRunSheets.length > 3 && (
-                            <button className="runsheet__drafts-more" onClick={handleShowDrafts}>
-                                View all drafts
-                            </button>
-                        )}
-                    </div>
-                </Card>
-            )}
-
-            {/* Filters */}
-            {hasRunSheets && (
-                <div className="runsheet__filters">
-                    <div className="runsheet__filters-group">
-                        <span>Show:</span>
-                        {[
-                            { id: 'all', label: 'All' },
-                            { id: 'draft', label: 'Drafts' },
-                            { id: 'dispatched', label: 'Dispatched' },
-                            { id: 'in_progress', label: 'In progress' },
-                            { id: 'completed', label: 'Completed' }
-                        ].map(filter => (
-                            <button
-                                key={filter.id}
-                                className={`runsheet__filter-chip ${statusFilter === filter.id ? 'runsheet__filter-chip--active' : ''}`}
-                                onClick={() => setStatusFilter(filter.id as typeof statusFilter)}
-                            >
-                                {filter.label}
-                            </button>
-                        ))}
-                    </div>
-                    <Badge variant="neutral" size="sm">
-                        Showing {filteredRunSheets.length} of {runSheets.length}
-                    </Badge>
+                    ) : (
+                        <Card className="runsheet__empty">
+                            <Sparkles size={48} opacity={0.3} />
+                            <h3>No draft run sheets</h3>
+                            <p>Run AI Optimize or switch to All Run Sheets to view dispatch history.</p>
+                            <div className="runsheet__empty-actions">
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    icon={optimizing ? <Loader size={14} className="spinner" /> : <Sparkles size={14} />}
+                                    onClick={handleOptimizeRunSheets}
+                                    disabled={optimizing || reviewedClusters.length === 0}
+                                >
+                                    {optimizing ? 'Optimizing...' : 'Optimize now'}
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => handleViewChange('all')}>
+                                    View all
+                                </Button>
+                            </div>
+                        </Card>
+                    )}
                 </div>
             )}
 
-            {/* Agent Response */}
-            {/* Dispatch Response */}
-            {dispatchResponse && (
-                <Card className="runsheet__agent-response runsheet__agent-response--dispatch">
-                    <h4>✅ Dispatch Confirmation</h4>
-                    <div className="runsheet__agent-response-content">
-                        {(() => {
-                            const renderWithBold = (text: string) => {
-                                const doublePattern = /\*\*(.+?)\*\*/g
-                                let remaining = text.replace(doublePattern, (match, content) => {
-                                    return `<BOLD>${content}</BOLD>`
-                                })
-                                
-                                const singlePattern = /\*([^*]+?)\*/g
-                                remaining = remaining.replace(singlePattern, (match, content) => {
-                                    return `<BOLD>${content}</BOLD>`
-                                })
-                                
-                                const segments = remaining.split(/(<BOLD>.*?<\/BOLD>)/)
-                                return segments.map((segment, i) => {
-                                    if (segment.startsWith('<BOLD>')) {
-                                        const content = segment.replace('<BOLD>', '').replace('</BOLD>', '')
-                                        return <strong key={i}>{content}</strong>
-                                    }
-                                    return segment
-                                })
-                            }
+            {activeView === 'all' && (
+                <div className="runsheet__panel">
+                    {hasRunSheets && (
+                        <div className="runsheet__filters">
+                            <div className="runsheet__filters-group">
+                                <span>Show:</span>
+                                {[
+                                    { id: 'all', label: 'All' },
+                                    { id: 'draft', label: 'Drafts' },
+                                    { id: 'dispatched', label: 'Dispatched' },
+                                    { id: 'in_progress', label: 'In progress' },
+                                    { id: 'completed', label: 'Completed' }
+                                ].map(filter => (
+                                    <button
+                                        key={filter.id}
+                                        className={`runsheet__filter-chip ${statusFilter === filter.id ? 'runsheet__filter-chip--active' : ''}`}
+                                        onClick={() => setStatusFilter(filter.id as typeof statusFilter)}
+                                    >
+                                        {filter.label}
+                                    </button>
+                                ))}
+                            </div>
+                            <Badge variant="neutral" size="sm">
+                                Showing {filteredRunSheets.length} of {runSheets.length}
+                            </Badge>
+                        </div>
+                    )}
 
-                            const lines = dispatchResponse.split('\n')
-                            return lines.map((line, index) => {
-                                if (line.trim().startsWith('-') || line.trim().startsWith('•')) {
-                                    return <li key={index}>{renderWithBold(line.replace(/^[\s-•]+/, ''))}</li>
-                                } else if (line.trim()) {
-                                    return <p key={index}>{renderWithBold(line)}</p>
-                                }
-                                return <br key={index} />
-                            })
-                        })()}
-                    </div>
-                </Card>
+                    {runSheets.length === 0 && (
+                        <Card className="runsheet__empty">
+                            <Sparkles size={48} opacity={0.3} />
+                            <h3>No Run Sheets Yet</h3>
+                            <p>Click "AI Optimize" to create optimized run sheets from reviewed clusters</p>
+                        </Card>
+                    )}
+
+                    {runSheets.length > 0 && filteredRunSheets.length === 0 && (
+                        <Card className="runsheet__empty">
+                            <Sparkles size={48} opacity={0.3} />
+                            <h3>No Run Sheets Match This Filter</h3>
+                            <p>Try switching the filter or clear to see all run sheets.</p>
+                        </Card>
+                    )}
+
+                    {/* Team columns */}
+                    {Object.keys(groupedSheets).length > 0 && (
+                        <div className="runsheet__teams">
+                            {Object.entries(groupedSheets).filter(([, windows]) => {
+                                if (statusFilter === 'all') return true
+                                const count = windows.AM.filter(sheet => sheet.status === statusFilter).length
+                                    + windows.PM.filter(sheet => sheet.status === statusFilter).length
+                                return count > 0
+                            }).map(([teamName, windows]) => (
+                                <div key={teamName} className="runsheet__team">
+                                    <div className="runsheet__team-header">
+                                        <h3>{teamName}</h3>
+                                        <Badge variant="neutral" size="sm">
+                                            {statusFilter === 'all'
+                                                ? (windows.AM?.length || 0) + (windows.PM?.length || 0)
+                                                : windows.AM.filter(sheet => sheet.status === statusFilter).length + windows.PM.filter(sheet => sheet.status === statusFilter).length
+                                            } run sheets
+                                        </Badge>
+                                    </div>
+
+                                    {['AM', 'PM'].map((window) => (
+                                        <div key={window} className="runsheet__window">
+                                            <div className="runsheet__window-header">
+                                                <Clock size={14} />
+                                                <span>{window} Window</span>
+                                            </div>
+                                            <div className="runsheet__tasks">
+                                                {(windows[window as 'AM' | 'PM'] || []).filter(sheet => statusFilter === 'all' || sheet.status === statusFilter).length === 0 ? (
+                                                    <p className="runsheet__empty-window">No run sheets</p>
+                                                ) : (
+                                                    (windows[window as 'AM' | 'PM'] || []).filter(sheet => statusFilter === 'all' || sheet.status === statusFilter).map((sheet) => (
+                                                        <Card key={sheet.id} padding="sm" className="runsheet__task">
+                                                            <div className="runsheet__task-header">
+                                                                <span className="runsheet__task-id">{sheet.id.slice(0, 8)}</span>
+                                                                <Badge variant={sheet.status === 'draft' ? 'warning' : 'success'} size="sm">
+                                                                    {sheet.status}
+                                                                </Badge>
+                                                            </div>
+                                                            <div className="runsheet__task-info">
+                                                                <span className="runsheet__task-zones">
+                                                                    {sheet.zones_covered?.join(', ') || 'No zones'}
+                                                                </span>
+                                                            </div>
+                                                            <div className="runsheet__task-capacity">
+                                                                Capacity: {sheet.capacity_used_percent}%
+                                                            </div>
+                                                            <div className="runsheet__task-meta">
+                                                                {sheet.run_sheet_tasks?.length || 0} tasks
+                                                            </div>
+                                                            {sheet.notes && (
+                                                                <div className="runsheet__task-notes">{sheet.notes}</div>
+                                                            )}
+                                                            {sheet.status === 'draft' && (
+                                                                <Button
+                                                                    variant="primary"
+                                                                    size="sm"
+                                                                    icon={dispatching === sheet.id ? <Loader size={14} className="spinner" /> : <Send size={14} />}
+                                                                    onClick={() => handleDispatchRunSheet(sheet, teamName)}
+                                                                    disabled={dispatching === sheet.id}
+                                                                    style={{ marginTop: '8px', width: '100%' }}
+                                                                >
+                                                                    {dispatching === sheet.id ? 'Dispatching...' : 'Dispatch'}
+                                                                </Button>
+                                                            )}
+                                                        </Card>
+                                                    ))
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
             )}
 
-            {agentResponse && (
-                <Card className="runsheet__agent-response">
-                    <h4>🤖 AI Planner Response</h4>
-                    <div className="runsheet__agent-response-content">
-                        {(() => {
-                            // Helper function to render text with bold formatting
-                            const renderWithBold = (text: string) => {
-                                const doublePattern = /\*\*(.+?)\*\*/g
-                                let remaining = text.replace(doublePattern, (match, content) => {
-                                    return `<BOLD>${content}</BOLD>`
-                                })
-                                
-                                const singlePattern = /\*([^*]+?)\*/g
-                                remaining = remaining.replace(singlePattern, (match, content) => {
-                                    return `<BOLD>${content}</BOLD>`
-                                })
-                                
-                                const segments = remaining.split(/(<BOLD>.*?<\/BOLD>)/)
-                                return segments.map((segment, i) => {
-                                    if (segment.startsWith('<BOLD>')) {
-                                        const content = segment.replace('<BOLD>', '').replace('</BOLD>', '')
-                                        return <strong key={i}>{content}</strong>
+            {activeView === 'activity' && (
+                <div className="runsheet__panel">
+                    {!agentResponse && !dispatchResponse && (
+                        <Card className="runsheet__empty">
+                            <Sparkles size={48} opacity={0.3} />
+                            <h3>No AI activity yet</h3>
+                            <p>Run AI Optimize or dispatch a run sheet to see responses here.</p>
+                        </Card>
+                    )}
+
+                    {dispatchResponse && (
+                        <Card className="runsheet__agent-response runsheet__agent-response--dispatch">
+                            <h4>Dispatch Confirmation</h4>
+                            <div className="runsheet__agent-response-content">
+                                {(() => {
+                                    const renderWithBold = (text: string) => {
+                                        const doublePattern = /\*\*(.+?)\*\*/g
+                                        let remaining = text.replace(doublePattern, (match, content) => {
+                                            return `<BOLD>${content}</BOLD>`
+                                        })
+                                        
+                                        const singlePattern = /\*([^*]+?)\*/g
+                                        remaining = remaining.replace(singlePattern, (match, content) => {
+                                            return `<BOLD>${content}</BOLD>`
+                                        })
+                                        
+                                        const segments = remaining.split(/(<BOLD>.*?<\/BOLD>)/)
+                                        return segments.map((segment, i) => {
+                                            if (segment.startsWith('<BOLD>')) {
+                                                const content = segment.replace('<BOLD>', '').replace('</BOLD>', '')
+                                                return <strong key={i}>{content}</strong>
+                                            }
+                                            return segment
+                                        })
                                     }
-                                    return segment
-                                })
-                            }
 
-                            const lines = agentResponse.split('\n')
-                            const elements: JSX.Element[] = []
-                            let tableLines: string[] = []
-                            let inTable = false
+                                    const lines = dispatchResponse.split('\n')
+                                    return lines.map((line, index) => {
+                                        if (line.trim().startsWith('-') || line.trim().startsWith('\u2022')) {
+                                            return <li key={index}>{renderWithBold(line.replace(/^[\s-\u2022]+/, ''))}</li>
+                                        } else if (line.trim()) {
+                                            return <p key={index}>{renderWithBold(line)}</p>
+                                        }
+                                        return <br key={index} />
+                                    })
+                                })()}
+                            </div>
+                        </Card>
+                    )}
 
-                            lines.forEach((line, index) => {
-                                const isTableLine = line.includes('|') && !line.trim().startsWith('|---')
-                                const isTableSeparator = line.trim().match(/^\|[-:\s|]+\|$/)
+                    {agentResponse && (
+                        <Card className="runsheet__agent-response">
+                            <h4>AI Planner Response</h4>
+                            <div className="runsheet__agent-response-content">
+                                {(() => {
+                                    // Helper function to render text with bold formatting
+                                    const renderWithBold = (text: string) => {
+                                        const doublePattern = /\*\*(.+?)\*\*/g
+                                        let remaining = text.replace(doublePattern, (match, content) => {
+                                            return `<BOLD>${content}</BOLD>`
+                                        })
+                                        
+                                        const singlePattern = /\*([^*]+?)\*/g
+                                        remaining = remaining.replace(singlePattern, (match, content) => {
+                                            return `<BOLD>${content}</BOLD>`
+                                        })
+                                        
+                                        const segments = remaining.split(/(<BOLD>.*?<\/BOLD>)/)
+                                        return segments.map((segment, i) => {
+                                            if (segment.startsWith('<BOLD>')) {
+                                                const content = segment.replace('<BOLD>', '').replace('</BOLD>', '')
+                                                return <strong key={i}>{content}</strong>
+                                            }
+                                            return segment
+                                        })
+                                    }
 
-                                if (isTableLine && !isTableSeparator) {
-                                    inTable = true
-                                    tableLines.push(line)
-                                } else {
-                                    // Render accumulated table
+                                    const lines = agentResponse.split('\n')
+                                    const elements: JSX.Element[] = []
+                                    let tableLines: string[] = []
+                                    let inTable = false
+
+                                    lines.forEach((line, index) => {
+                                        const isTableLine = line.includes('|') && !line.trim().startsWith('|---')
+                                        const isTableSeparator = line.trim().match(/^\|[-:\s|]+\|$/)
+
+                                        if (isTableLine && !isTableSeparator) {
+                                            inTable = true
+                                            tableLines.push(line)
+                                        } else {
+                                            // Render accumulated table
+                                            if (inTable && tableLines.length > 0) {
+                                                const headerLine = tableLines[0]
+                                                if (!headerLine) return
+                                                
+                                                const headers = headerLine.split('|').map(h => h.trim()).filter(h => h)
+                                                const rows = tableLines.slice(1).map(row => 
+                                                    row.split('|').map(cell => cell.trim()).filter(cell => cell)
+                                                )
+                                                
+                                                elements.push(
+                                                    <table key={`table-${index}`} className="agent-table">
+                                                        <thead>
+                                                            <tr>
+                                                                {headers.map((header, i) => (
+                                                                    <th key={i}>{renderWithBold(header)}</th>
+                                                                ))}
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {rows.map((row, i) => (
+                                                                <tr key={i}>
+                                                                    {row.map((cell, j) => (
+                                                                        <td key={j}>{renderWithBold(cell)}</td>
+                                                                    ))}
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                )
+                                                tableLines = []
+                                                inTable = false
+                                            }
+
+                                            if (isTableSeparator) return
+
+                                            // Headers
+                                            if (line.startsWith('### ')) {
+                                                elements.push(<h5 key={index}>{renderWithBold(line.replace('### ', ''))}</h5>)
+                                            } else if (line.startsWith('## ')) {
+                                                elements.push(<h4 key={index}>{renderWithBold(line.replace('## ', ''))}</h4>)
+                                            }
+                                            // List items
+                                            else if (line.trim().startsWith('-') || line.trim().startsWith('\u2022')) {
+                                                elements.push(<li key={index}>{renderWithBold(line.replace(/^[\s-\u2022]+/, ''))}</li>)
+                                            } else if (line.trim().match(/^\d+\./)) {
+                                                elements.push(<li key={index}>{renderWithBold(line.replace(/^\d+\.\s*/, ''))}</li>)
+                                            }
+                                            // Empty lines
+                                            else if (line.trim() === '') {
+                                                elements.push(<br key={index} />)
+                                            }
+                                            // Regular paragraphs
+                                            else if (line.trim()) {
+                                                elements.push(<p key={index}>{renderWithBold(line)}</p>)
+                                            }
+                                        }
+                                    })
+
+                                    // Handle remaining table
                                     if (inTable && tableLines.length > 0) {
                                         const headerLine = tableLines[0]
-                                        if (!headerLine) return
+                                        if (!headerLine) return elements
                                         
                                         const headers = headerLine.split('|').map(h => h.trim()).filter(h => h)
                                         const rows = tableLines.slice(1).map(row => 
@@ -540,7 +704,7 @@ Provide dispatch confirmation and field instructions.`
                                         )
                                         
                                         elements.push(
-                                            <table key={`table-${index}`} className="agent-table">
+                                            <table key="table-final" className="agent-table">
                                                 <thead>
                                                     <tr>
                                                         {headers.map((header, i) => (
@@ -559,182 +723,16 @@ Provide dispatch confirmation and field instructions.`
                                                 </tbody>
                                             </table>
                                         )
-                                        tableLines = []
-                                        inTable = false
                                     }
 
-                                    if (isTableSeparator) return
-
-                                    // Headers
-                                    if (line.startsWith('### ')) {
-                                        elements.push(<h5 key={index}>{renderWithBold(line.replace('### ', ''))}</h5>)
-                                    } else if (line.startsWith('## ')) {
-                                        elements.push(<h4 key={index}>{renderWithBold(line.replace('## ', ''))}</h4>)
-                                    }
-                                    // List items
-                                    else if (line.trim().startsWith('-') || line.trim().startsWith('•')) {
-                                        elements.push(<li key={index}>{renderWithBold(line.replace(/^[\s-•]+/, ''))}</li>)
-                                    } else if (line.trim().match(/^\d+\./)) {
-                                        elements.push(<li key={index}>{renderWithBold(line.replace(/^\d+\.\s*/, ''))}</li>)
-                                    }
-                                    // Empty lines
-                                    else if (line.trim() === '') {
-                                        elements.push(<br key={index} />)
-                                    }
-                                    // Regular paragraphs
-                                    else if (line.trim()) {
-                                        elements.push(<p key={index}>{renderWithBold(line)}</p>)
-                                    }
-                                }
-                            })
-
-                            // Handle remaining table
-                            if (inTable && tableLines.length > 0) {
-                                const headerLine = tableLines[0]
-                                if (!headerLine) return elements
-                                
-                                const headers = headerLine.split('|').map(h => h.trim()).filter(h => h)
-                                const rows = tableLines.slice(1).map(row => 
-                                    row.split('|').map(cell => cell.trim()).filter(cell => cell)
-                                )
-                                
-                                elements.push(
-                                    <table key="table-final" className="agent-table">
-                                        <thead>
-                                            <tr>
-                                                {headers.map((header, i) => (
-                                                    <th key={i}>{renderWithBold(header)}</th>
-                                                ))}
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {rows.map((row, i) => (
-                                                <tr key={i}>
-                                                    {row.map((cell, j) => (
-                                                        <td key={j}>{renderWithBold(cell)}</td>
-                                                    ))}
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                )
-                            }
-
-                            return elements
-                        })()}
-                    </div>
-                </Card>
-            )}
-
-            {/* Empty State */}
-            {runSheets.length === 0 && (
-                <Card className="runsheet__empty">
-                    <Sparkles size={48} opacity={0.3} />
-                    <h3>No Run Sheets Yet</h3>
-                    <p>Click "AI Optimize" to create optimized run sheets from reviewed clusters</p>
-                </Card>
-            )}
-
-            {runSheets.length > 0 && filteredRunSheets.length === 0 && (
-                <Card className="runsheet__empty">
-                    <Sparkles size={48} opacity={0.3} />
-                    <h3>No Run Sheets Match This Filter</h3>
-                    <p>Try switching the filter or clear to see all run sheets.</p>
-                </Card>
-            )}
-
-            {/* Team columns */}
-            {Object.keys(groupedSheets).length > 0 && (
-                <div className="runsheet__teams" ref={teamsRef}>
-                    {Object.entries(groupedSheets).filter(([, windows]) => {
-                        if (statusFilter === 'all') return true
-                        const count = windows.AM.filter(sheet => sheet.status === statusFilter).length
-                            + windows.PM.filter(sheet => sheet.status === statusFilter).length
-                        return count > 0
-                    }).map(([teamName, windows]) => (
-                        <div key={teamName} className="runsheet__team">
-                            <div className="runsheet__team-header">
-                                <h3>{teamName}</h3>
-                                <Badge variant="neutral" size="sm">
-                                    {statusFilter === 'all'
-                                        ? (windows.AM?.length || 0) + (windows.PM?.length || 0)
-                                        : windows.AM.filter(sheet => sheet.status === statusFilter).length + windows.PM.filter(sheet => sheet.status === statusFilter).length
-                                    } run sheets
-                                </Badge>
+                                    return elements
+                                })()}
                             </div>
-
-                            {['AM', 'PM'].map((window) => (
-                                <div key={window} className="runsheet__window">
-                                    <div className="runsheet__window-header">
-                                        <Clock size={14} />
-                                        <span>{window} Window</span>
-                                    </div>
-                                    <div className="runsheet__tasks">
-                                        {(windows[window as 'AM' | 'PM'] || []).filter(sheet => statusFilter === 'all' || sheet.status === statusFilter).length === 0 ? (
-                                            <p className="runsheet__empty-window">No run sheets</p>
-                                        ) : (
-                                            (windows[window as 'AM' | 'PM'] || []).filter(sheet => statusFilter === 'all' || sheet.status === statusFilter).map((sheet) => (
-                                                <Card key={sheet.id} padding="sm" className="runsheet__task">
-                                                    <div className="runsheet__task-header">
-                                                        <span className="runsheet__task-id">{sheet.id.slice(0, 8)}</span>
-                                                        <Badge variant={sheet.status === 'draft' ? 'warning' : 'success'} size="sm">
-                                                            {sheet.status}
-                                                        </Badge>
-                                                    </div>
-                                                    <div className="runsheet__task-info">
-                                                        <span className="runsheet__task-zones">
-                                                            {sheet.zones_covered?.join(', ') || 'No zones'}
-                                                        </span>
-                                                    </div>
-                                                    <div className="runsheet__task-capacity">
-                                                        Capacity: {sheet.capacity_used_percent}%
-                                                    </div>
-                                                    <div className="runsheet__task-meta">
-                                                        {sheet.run_sheet_tasks?.length || 0} tasks
-                                                    </div>
-                                                    {sheet.notes && (
-                                                        <div className="runsheet__task-notes">{sheet.notes}</div>
-                                                    )}
-                                                    {sheet.status === 'draft' && (
-                                                        <Button
-                                                            variant="primary"
-                                                            size="sm"
-                                                            icon={dispatching === sheet.id ? <Loader size={14} className="spinner" /> : <Send size={14} />}
-                                                            onClick={() => handleDispatchRunSheet(sheet, teamName)}
-                                                            disabled={dispatching === sheet.id}
-                                                            style={{ marginTop: '8px', width: '100%' }}
-                                                        >
-                                                            {dispatching === sheet.id ? 'Dispatching...' : 'Dispatch'}
-                                                        </Button>
-                                                    )}
-                                                </Card>
-                                            ))
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    ))}
+                        </Card>
+                    )}
                 </div>
             )}
 
-            {/* Summary Stats */}
-            {runSheets.length > 0 && (
-                <Card className="runsheet__summary">
-                    <div className="runsheet__summary-item">
-                        <span>Total Run Sheets</span>
-                        <strong>{runSheets.length}</strong>
-                    </div>
-                    <div className="runsheet__summary-item">
-                        <span>Teams Assigned</span>
-                        <strong>{Object.keys(groupedSheets).length}</strong>
-                    </div>
-                    <div className="runsheet__summary-item">
-                        <span>Zones Covered</span>
-                        <strong>{new Set(runSheets.flatMap(s => s.zones_covered || [])).size}</strong>
-                    </div>
-                </Card>
-            )}
         </div>
     )
 }

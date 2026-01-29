@@ -1,294 +1,508 @@
-// Operations Hub - Main 3D visualization controller
-// Refactored to support Global → Singapore view transitions
-import { useEffect, useRef, useState, useCallback } from 'react'
-import * as THREE from 'three'
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { useOperationsStore, useThemeStore } from '../../store'
-import GlobeScene, { GlobeSceneRef } from './globe/GlobeScene'
-import ClusterMarkers, { ClusterMarkersRef, ClusterData } from './globe/ClusterMarkers'
-import SingaporeMap, { SingaporeMapRef } from './singapore/SingaporeMap'
-import PhotorealisticTiles, { PhotorealisticTilesRef } from './singapore/PhotorealisticTiles'
+// Operations Hub - 3D Map visualization using Google Maps Map3DElement
+// Supports Global ↔ Singapore view transitions with photorealistic 3D tiles
+import { useEffect, useRef, useCallback, useState } from 'react'
+import { useOperationsStore } from '../../store'
 import SceneOverlay, { ViewMode } from './ui/SceneOverlay'
-import { useGlobeCamera } from './hooks/useGlobeCamera'
-import { useCameraTransition } from './hooks/useCameraTransition'
 import './OperationsHub.css'
 
-// Theme colors for the 3D scene
-const THEME_COLORS = {
-    light: {
-        background: 0xF6F8F9,
-        ambient: 0xffffff,
+// Supabase configuration
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+
+// Data interfaces
+interface ClusterData {
+    id: string
+    category: string
+    location_label: string
+    zone_id: string
+    severity_score: number
+    complaint_count: number
+    state: string
+    lat?: number
+    lng?: number
+}
+
+interface ComplaintData {
+    id: string
+    text: string
+    location_label: string
+    severity_pred: number
+    category_pred: string
+    status: string
+    lat?: number
+    lng?: number
+}
+
+// Severity color mapping
+const SEVERITY_COLORS = {
+    1: '#22c55e', // green - low
+    2: '#eab308', // yellow - moderate
+    3: '#f97316', // orange - high
+    4: '#ef4444', // red - critical
+    5: '#dc2626', // dark red - severe
+}
+
+// Camera presets for each view mode
+const VIEWS = {
+    global: {
+        center: { lat: 10, lng: 105, altitude: 0 },
+        range: 5_000_000,
+        tilt: 0,
+        heading: 0,
     },
-    dark: {
-        background: 0x0B171C,
-        ambient: 0xffffff,
+    singapore: {
+        center: { lat: 1.3521, lng: 103.8198, altitude: 200 },
+        range: 18000,
+        tilt: 55,
+        heading: 0,
     },
 }
 
-// Sample global clusters data
-const GLOBAL_CLUSTERS: ClusterData[] = [
-    // Singapore region (main focus)
-    { id: 'sg-east', name: 'Singapore East', lat: 1.35, lng: 103.94, count: 42, severity: 'high', region: 'asia', country: 'SG' },
-    { id: 'sg-central', name: 'Singapore Central', lat: 1.30, lng: 103.85, count: 28, severity: 'medium', region: 'asia', country: 'SG' },
-    { id: 'sg-west', name: 'Singapore West', lat: 1.34, lng: 103.70, count: 15, severity: 'low', region: 'asia', country: 'SG' },
-    { id: 'sg-north', name: 'Singapore North', lat: 1.42, lng: 103.82, count: 35, severity: 'critical', region: 'asia', country: 'SG' },
-    // Other Asia Pacific
-    { id: 'my-kl', name: 'Kuala Lumpur', lat: 3.14, lng: 101.69, count: 18, severity: 'medium', region: 'asia', country: 'MY' },
-    { id: 'th-bk', name: 'Bangkok', lat: 13.76, lng: 100.50, count: 22, severity: 'low', region: 'asia', country: 'TH' },
-    { id: 'id-jk', name: 'Jakarta', lat: -6.21, lng: 106.85, count: 31, severity: 'high', region: 'asia', country: 'ID' },
-    { id: 'ph-mn', name: 'Manila', lat: 14.60, lng: 120.98, count: 12, severity: 'low', region: 'asia', country: 'PH' },
-    { id: 'jp-tk', name: 'Tokyo', lat: 35.68, lng: 139.69, count: 8, severity: 'low', region: 'asia', country: 'JP' },
-    { id: 'au-sy', name: 'Sydney', lat: -33.87, lng: 151.21, count: 14, severity: 'medium', region: 'oceania', country: 'AU' },
-]
+const TRANSITION_MS = 2500
+
+// Helper: Create circular polygon coordinates for zone overlay
+function createCircleCoordinates(lat: number, lng: number, radiusMeters: number, points = 32) {
+    const coords: Array<{ lat: number; lng: number; altitude: number }> = []
+    const earthRadius = 6371000 // meters
+
+    for (let i = 0; i <= points; i++) {
+        const angle = (i * 360) / points
+        const rad = (angle * Math.PI) / 180
+
+        const latOffset = (radiusMeters / earthRadius) * (180 / Math.PI)
+        const lngOffset = (radiusMeters / earthRadius) * (180 / Math.PI) / Math.cos((lat * Math.PI) / 180)
+
+        const circleLat = lat + latOffset * Math.cos(rad)
+        const circleLng = lng + lngOffset * Math.sin(rad)
+
+        coords.push({ lat: circleLat, lng: circleLng, altitude: 0 })
+    }
+
+    return coords
+}
+
+// Geocoding cache to avoid repeated API calls
+const geocodeCache = new Map<string, { lat: number; lng: number } | null>()
+
+// Helper: Geocode location label to lat/lng using Google Geocoding API
+async function geocodeLocation(locationLabel: string, apiKey: string): Promise<{ lat: number; lng: number } | null> {
+    // Check cache first
+    if (geocodeCache.has(locationLabel)) {
+        return geocodeCache.get(locationLabel)!
+    }
+
+    // Default to Singapore center if no location
+    const singaporeCenter = { lat: 1.3521, lng: 103.8198 }
+    if (!locationLabel) {
+        geocodeCache.set(locationLabel, singaporeCenter)
+        return singaporeCenter
+    }
+
+    try {
+        // Add "Singapore" to the query if not already present
+        const query = locationLabel.toLowerCase().includes('singapore')
+            ? locationLabel
+            : `${locationLabel}, Singapore`
+
+        const response = await fetch(
+            `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${apiKey}`
+        )
+        const data = await response.json()
+
+        if (data.status === 'OK' && data.results && data.results.length > 0) {
+            const result = {
+                lat: data.results[0].geometry.location.lat,
+                lng: data.results[0].geometry.location.lng
+            }
+            geocodeCache.set(locationLabel, result)
+            return result
+        } else {
+            console.warn(`Geocoding failed for "${locationLabel}":`, data.status)
+            // Fallback to Singapore center
+            geocodeCache.set(locationLabel, singaporeCenter)
+            return singaporeCenter
+        }
+    } catch (error) {
+        console.error('Geocoding error:', error)
+        // Fallback to Singapore center
+        geocodeCache.set(locationLabel, singaporeCenter)
+        return singaporeCenter
+    }
+}
+
+// Google-recommended async bootstrap loader (runs once at module level)
+function ensureMapsBootstrap(apiKey: string) {
+    const g: Record<string, string> = { key: apiKey, v: 'alpha' }
+    const w = window as any
+    const c = 'google'
+    const l = 'importLibrary'
+    const q = '__ib__'
+    const m = document
+
+    w[c] = w[c] || {}
+    const d = w[c].maps || (w[c].maps = {})
+    const r = new Set<string>()
+    const e = new URLSearchParams()
+
+    if (d[l]) return // Already bootstrapped
+
+    let h: Promise<void> | null = null
+    const u = () =>
+        h ||
+        (h = new Promise<void>((resolve, reject) => {
+            const a = m.createElement('script')
+            e.set('libraries', [...r].join(','))
+            for (const k in g) {
+                e.set(
+                    k.replace(/[A-Z]/g, (t: string) => '_' + t[0].toLowerCase()),
+                    g[k] ?? ''
+                )
+            }
+            e.set('callback', c + '.maps.' + q)
+            a.src = `https://maps.${c}apis.com/maps/api/js?` + e
+            d[q] = resolve
+            a.onerror = () => {
+                h = null
+                reject(new Error('Google Maps JavaScript API could not load.'))
+            }
+            a.nonce = (m.querySelector('script[nonce]') as HTMLScriptElement)?.nonce || ''
+            m.head.append(a)
+        }))
+
+    d[l] = (f: string, ...n: any[]) => {
+        r.add(f)
+        return u().then(() => d[l](f, ...n))
+    }
+}
 
 export default function OperationsHub() {
     const containerRef = useRef<HTMLDivElement>(null)
-    const sceneRef = useRef<THREE.Scene | null>(null)
-    const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
-    const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
-    const controlsRef = useRef<OrbitControls | null>(null)
-    const animationIdRef = useRef<number>(0)
+    const mapContainerRef = useRef<HTMLDivElement>(null)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const map3dRef = useRef<any>(null)
+    const markersRef = useRef<any[]>([])
+    const polygonsRef = useRef<any[]>([])
 
-    // Component refs
-    const globeRef = useRef<GlobeSceneRef>(null)
-    const clusterMarkersRef = useRef<ClusterMarkersRef>(null)
-    const singaporeMapRef = useRef<SingaporeMapRef>(null)
-    const photorealisticTilesRef = useRef<PhotorealisticTilesRef>(null)
+    const [clustersData, setClustersData] = useState<ClusterData[]>([])
+    const [complaintsData, setComplaintsData] = useState<ComplaintData[]>([])
+    const [hoveredItem, setHoveredItem] = useState<{ type: 'cluster' | 'complaint'; data: ClusterData | ComplaintData } | null>(null)
+    const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
 
-    // State
-    const [hoveredCluster, setHoveredCluster] = useState<ClusterData | null>(null)
     const { viewMode, isTransitioning, setViewMode, setIsTransitioning, setSceneReady } = useOperationsStore()
-    const { theme } = useThemeStore()
-    const isDark = theme === 'dark'
+    const tilesApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string
 
-    // Camera and transition hooks
-    const { resetView } = useGlobeCamera(cameraRef.current, controlsRef.current)
-    const { transitionToGlobal, transitionToSingapore } = useCameraTransition()
-    const tilesApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined
-    const showTilesAttribution = Boolean(tilesApiKey) && (viewMode === 'singapore' || isTransitioning)
+    // ── Track mouse position for tooltip ──────────────────────────────
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (hoveredItem && containerRef.current) {
+                const rect = containerRef.current.getBoundingClientRect()
+                setTooltipPosition({
+                    x: e.clientX - rect.left,
+                    y: e.clientY - rect.top
+                })
+            }
+        }
 
-    // Handle view mode change
+        if (hoveredItem) {
+            window.addEventListener('mousemove', handleMouseMove)
+            return () => window.removeEventListener('mousemove', handleMouseMove)
+        }
+    }, [hoveredItem])
+
+    // ── Fetch clusters and complaints data ────────────────────────────
+    const fetchData = useCallback(async () => {
+        try {
+            // Fetch clusters
+            const clustersResponse = await fetch(`${SUPABASE_URL}/rest/v1/clusters?state=not.in.(CLOSED,RESOLVED)&select=*`, {
+                headers: {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                }
+            })
+            if (clustersResponse.ok) {
+                const clusters = await clustersResponse.json()
+                setClustersData(clusters)
+            }
+
+            // Fetch recent complaints
+            const complaintsResponse = await fetch(`${SUPABASE_URL}/rest/v1/complaints?order=created_at.desc&limit=100&select=*`, {
+                headers: {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                }
+            })
+            if (complaintsResponse.ok) {
+                const complaints = await complaintsResponse.json()
+                setComplaintsData(complaints)
+            }
+        } catch (error) {
+            console.error('Failed to fetch data:', error)
+        }
+    }, [])
+
+    // ── Add zone polygons and complaint markers ────────────────────────
+    const addOverlays = useCallback(async () => {
+        const map3d = map3dRef.current
+        if (!map3d) return
+
+        try {
+            const { Polygon3DElement, Marker3DInteractiveElement } = await (window as any).google.maps.importLibrary('maps3d')
+
+            // Clear existing overlays
+            markersRef.current.forEach(marker => marker.remove?.())
+            polygonsRef.current.forEach(polygon => polygon.remove?.())
+            markersRef.current = []
+            polygonsRef.current = []
+
+            // Add zone polygons for clusters
+            for (const cluster of clustersData) {
+                const coords = await geocodeLocation(cluster.location_label || cluster.zone_id, tilesApiKey)
+                if (!coords) continue
+
+                // Calculate zone radius based on complaint count (battle royale style)
+                const baseRadius = 200 // meters
+                const radius = baseRadius + (cluster.complaint_count * 20)
+
+                // Create circular zone polygon
+                const circlePath = createCircleCoordinates(coords.lat, coords.lng, radius)
+
+                // Determine zone color based on severity
+                const severity = Math.min(Math.max(Math.round(cluster.severity_score || 3), 1), 5)
+                const color = SEVERITY_COLORS[severity as keyof typeof SEVERITY_COLORS]
+
+                // Convert hex color to rgba with opacity for Polygon3DElement
+                const hexToRgba = (hex: string, alpha: number) => {
+                    const r = parseInt(hex.slice(1, 3), 16)
+                    const g = parseInt(hex.slice(3, 5), 16)
+                    const b = parseInt(hex.slice(5, 7), 16)
+                    return `rgba(${r}, ${g}, ${b}, ${alpha})`
+                }
+
+                const polygon = new Polygon3DElement({
+                    path: circlePath,
+                    strokeColor: color,
+                    strokeWidth: 3,
+                    fillColor: hexToRgba(color, 0.15),
+                    altitudeMode: 'CLAMP_TO_GROUND',
+                    extruded: false,
+                })
+
+                // Add hover events for cluster zones
+                polygon.addEventListener('gmp-mouseenter', () => {
+                    setHoveredItem({ type: 'cluster', data: cluster })
+                    polygon.strokeWidth = 5 // Highlight on hover
+                })
+
+                polygon.addEventListener('gmp-mouseleave', () => {
+                    setHoveredItem(null)
+                    polygon.strokeWidth = 3 // Reset
+                })
+
+                map3d.append(polygon)
+                polygonsRef.current.push(polygon)
+            }
+
+            // Add complaint markers
+            for (const complaint of complaintsData) {
+                const coords = await geocodeLocation(complaint.location_label, tilesApiKey)
+                if (!coords) continue
+
+                const severity = Math.min(Math.max(complaint.severity_pred || 3, 1), 5)
+                const color = SEVERITY_COLORS[severity as keyof typeof SEVERITY_COLORS]
+
+                const marker = new Marker3DInteractiveElement({
+                    position: { lat: coords.lat, lng: coords.lng, altitude: 0 },
+                    altitudeMode: 'CLAMP_TO_GROUND',
+                    extruded: true,
+                })
+
+                // Style the marker with severity color
+                marker.style.setProperty('--gmp-3d-marker-color', color)
+                marker.style.setProperty('--gmp-3d-marker-scale', '0.7')
+
+                // Add hover events for complaint markers
+                marker.addEventListener('gmp-mouseenter', () => {
+                    setHoveredItem({ type: 'complaint', data: complaint })
+                    marker.style.setProperty('--gmp-3d-marker-scale', '1.0') // Enlarge on hover
+                })
+
+                marker.addEventListener('gmp-mouseleave', () => {
+                    setHoveredItem(null)
+                    marker.style.setProperty('--gmp-3d-marker-scale', '0.7') // Reset
+                })
+
+                // Add click handler for complaint details
+                marker.addEventListener('gmp-click', () => {
+                    console.log('Complaint clicked:', complaint)
+                })
+
+                map3d.append(marker)
+                markersRef.current.push(marker)
+            }
+
+            console.log(`Added ${polygonsRef.current.length} zones and ${markersRef.current.length} complaint markers`)
+        } catch (error) {
+            console.error('Failed to add overlays:', error)
+        }
+    }, [clustersData, complaintsData, tilesApiKey])
+
+    // ── Load Google Maps JS API & create Map3DElement ──────────────────
+    useEffect(() => {
+        if (!mapContainerRef.current || !tilesApiKey) return
+
+        let cancelled = false
+
+        // Install the async bootstrap loader (idempotent)
+        ensureMapsBootstrap(tilesApiKey)
+
+        const init = async () => {
+            // importLibrary is set up by the bootstrap — it loads the script on first call
+            const { Map3DElement } = await (window as any).google.maps.importLibrary('maps3d')
+
+            if (cancelled) return
+
+            const view = VIEWS.global
+            const map3d = new Map3DElement({
+                center: view.center,
+                range: view.range,
+                tilt: view.tilt,
+                heading: view.heading,
+                mode: 'SATELLITE',
+                defaultUIHidden: true,
+            })
+
+            map3d.style.width = '100%'
+            map3d.style.height = '100%'
+            map3d.style.position = 'absolute'
+            map3d.style.inset = '0'
+
+            mapContainerRef.current!.appendChild(map3d)
+            map3dRef.current = map3d
+            setSceneReady(true)
+
+            // Fetch data after map is ready
+            fetchData()
+        }
+
+        init().catch(console.error)
+
+        return () => {
+            cancelled = true
+            // Cleanup markers and polygons
+            markersRef.current.forEach(marker => marker.remove?.())
+            polygonsRef.current.forEach(polygon => polygon.remove?.())
+            markersRef.current = []
+            polygonsRef.current = []
+
+            if (map3dRef.current?.parentElement) {
+                map3dRef.current.parentElement.removeChild(map3dRef.current)
+            }
+            map3dRef.current = null
+            setSceneReady(false)
+        }
+    }, [tilesApiKey, setSceneReady, fetchData])
+
+    // ── Add overlays when data changes ────────────────────────────────
+    useEffect(() => {
+        if (map3dRef.current && (clustersData.length > 0 || complaintsData.length > 0)) {
+            addOverlays()
+        }
+    }, [clustersData, complaintsData, addOverlays])
+
+    // ── View mode transition ──────────────────────────────────────────
     const handleModeChange = useCallback(
         (mode: ViewMode) => {
-            if (isTransitioning || !cameraRef.current || !controlsRef.current) return
+            const map3d = map3dRef.current
+            if (isTransitioning || !map3d) return
 
             setIsTransitioning(true)
 
-            if (mode === 'singapore') {
-                transitionToSingapore({
-                    camera: cameraRef.current,
-                    controls: controlsRef.current,
-                    globeGroup: globeRef.current?.group,
-                    singaporeGroup: photorealisticTilesRef.current?.group || singaporeMapRef.current?.group,
-                    markersGroup: clusterMarkersRef.current?.group,
-                    onTransitionComplete: () => {
-                        setViewMode('singapore')
-                        setIsTransitioning(false)
-                        // Apply controls constraints for Singapore
-                        if (controlsRef.current) {
-                            controlsRef.current.enablePan = true
-                            controlsRef.current.minDistance = 2
-                            controlsRef.current.maxDistance = 60
-                            controlsRef.current.maxPolarAngle = Math.PI / 2.5
-                            controlsRef.current.autoRotate = false
-                        }
-                    }
-                })
-            } else {
-                transitionToGlobal({
-                    camera: cameraRef.current,
-                    controls: controlsRef.current,
-                    globeGroup: globeRef.current?.group,
-                    singaporeGroup: photorealisticTilesRef.current?.group || singaporeMapRef.current?.group,
-                    markersGroup: clusterMarkersRef.current?.group,
-                    onTransitionComplete: () => {
-                        setViewMode('global')
-                        setIsTransitioning(false)
-                        // Reset controls for Global
-                        if (controlsRef.current) {
-                            controlsRef.current.enablePan = false
-                            controlsRef.current.minDistance = 8
-                            controlsRef.current.maxDistance = 30
-                            controlsRef.current.maxPolarAngle = Math.PI / 2
-                            controlsRef.current.autoRotate = true
-                        }
-                    }
-                })
+            const view = VIEWS[mode]
+
+            map3d.flyCameraTo({
+                endCamera: {
+                    center: view.center,
+                    range: view.range,
+                    tilt: view.tilt,
+                    heading: view.heading,
+                },
+                durationMillis: TRANSITION_MS,
+            })
+
+            // Listen for animation end to update state
+            const onEnd = () => {
+                setViewMode(mode)
+                setIsTransitioning(false)
+                map3d.removeEventListener('gmp-animationend', onEnd)
             }
+            map3d.addEventListener('gmp-animationend', onEnd)
+
+            // Fallback timeout in case the event doesn't fire
+            setTimeout(() => {
+                setViewMode(mode)
+                setIsTransitioning(false)
+            }, TRANSITION_MS + 500)
         },
-        [isTransitioning, setIsTransitioning, setViewMode, transitionToSingapore, transitionToGlobal]
+        [isTransitioning, setIsTransitioning, setViewMode]
     )
 
-    // Handle reset view
+    // ── Reset view ────────────────────────────────────────────────────
     const handleResetView = useCallback(() => {
-        if (viewMode === 'global') {
-            resetView(800)
-        } else {
-            // Reset Singapore view
-            if (cameraRef.current && controlsRef.current) {
-                cameraRef.current.position.set(0, 15, 10)
-                controlsRef.current.target.set(0, 0, 0)
-                controlsRef.current.update()
-            }
-        }
-    }, [viewMode, resetView])
+        const map3d = map3dRef.current
+        if (!map3d) return
 
-    // Handle zoom
+        const view = VIEWS[viewMode]
+        map3d.flyCameraTo({
+            endCamera: {
+                center: view.center,
+                range: view.range,
+                tilt: view.tilt,
+                heading: view.heading,
+            },
+            durationMillis: 1000,
+        })
+    }, [viewMode])
+
+    // ── Zoom controls ─────────────────────────────────────────────────
     const handleZoomIn = useCallback(() => {
-        if (cameraRef.current) {
-            const direction = new THREE.Vector3()
-            cameraRef.current.getWorldDirection(direction)
-            cameraRef.current.position.addScaledVector(direction, 2)
-        }
-    }, [])
+        const map3d = map3dRef.current
+        if (!map3d) return
+
+        const currentRange = map3d.range ?? VIEWS[viewMode].range
+        map3d.flyCameraTo({
+            endCamera: {
+                center: map3d.center,
+                range: currentRange * 0.6,
+                tilt: map3d.tilt,
+                heading: map3d.heading,
+            },
+            durationMillis: 500,
+        })
+    }, [viewMode])
 
     const handleZoomOut = useCallback(() => {
-        if (cameraRef.current) {
-            const direction = new THREE.Vector3()
-            cameraRef.current.getWorldDirection(direction)
-            cameraRef.current.position.addScaledVector(direction, -2)
-        }
-    }, [])
+        const map3d = map3dRef.current
+        if (!map3d) return
 
-    // Update theme colors
-    useEffect(() => {
-        if (!sceneRef.current) return
-        const colors = THEME_COLORS[theme]
-
-        sceneRef.current.background = new THREE.Color(colors.background)
-        sceneRef.current.fog = new THREE.Fog(colors.background, 30, 80)
-
-        // Update child components
-        globeRef.current?.updateTheme(isDark)
-        singaporeMapRef.current?.updateTheme(isDark)
-    }, [theme, isDark])
-
-    // Initialize Three.js scene
-    useEffect(() => {
-        if (!containerRef.current) return
-
-        const container = containerRef.current
-        const width = container.clientWidth
-        const height = container.clientHeight
-        const colors = THEME_COLORS[theme]
-
-        // Scene
-        const scene = new THREE.Scene()
-        scene.background = new THREE.Color(colors.background)
-        scene.fog = new THREE.Fog(colors.background, 30, 80)
-        sceneRef.current = scene
-
-        // Camera
-        const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000)
-        camera.position.set(0, 8, 15)
-        camera.lookAt(0, 0, 0)
-        cameraRef.current = camera
-
-        // Renderer
-        const renderer = new THREE.WebGLRenderer({
-            antialias: true,
-            alpha: true,
-            powerPreference: 'high-performance',
+        const currentRange = map3d.range ?? VIEWS[viewMode].range
+        map3d.flyCameraTo({
+            endCamera: {
+                center: map3d.center,
+                range: currentRange * 1.6,
+                tilt: map3d.tilt,
+                heading: map3d.heading,
+            },
+            durationMillis: 500,
         })
-        renderer.setSize(width, height)
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-        renderer.shadowMap.enabled = true
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap
-        container.appendChild(renderer.domElement)
-        rendererRef.current = renderer
-
-        // Controls
-        const controls = new OrbitControls(camera, renderer.domElement)
-        controls.enableDamping = true
-        controls.dampingFactor = 0.05
-        controls.minDistance = 8
-        controls.maxDistance = 30
-        controls.maxPolarAngle = Math.PI / 2
-        controls.autoRotate = true
-        controls.autoRotateSpeed = 0.2
-        controlsRef.current = controls
-
-        // Lights
-        const ambientLight = new THREE.AmbientLight(colors.ambient, 0.5)
-        scene.add(ambientLight)
-
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1)
-        directionalLight.position.set(10, 20, 10)
-        directionalLight.castShadow = true
-        directionalLight.shadow.mapSize.width = 2048
-        directionalLight.shadow.mapSize.height = 2048
-        scene.add(directionalLight)
-
-        const hemisphereLight = new THREE.HemisphereLight(0x4FC3F7, 0x1A3F4E, 0.3)
-        scene.add(hemisphereLight)
-
-        // Animation loop
-        const animate = () => {
-            controls.update()
-            photorealisticTilesRef.current?.update()
-            renderer.render(scene, camera)
-            animationIdRef.current = requestAnimationFrame(animate)
-        }
-        animate()
-        setSceneReady(true)
-
-        // Resize handler
-        const handleResize = () => {
-            const newWidth = container.clientWidth
-            const newHeight = container.clientHeight
-            camera.aspect = newWidth / newHeight
-            camera.updateProjectionMatrix()
-            renderer.setSize(newWidth, newHeight)
-        }
-        window.addEventListener('resize', handleResize)
-
-        // Cleanup
-        return () => {
-            window.removeEventListener('resize', handleResize)
-            cancelAnimationFrame(animationIdRef.current)
-            renderer.dispose()
-            container.removeChild(renderer.domElement)
-            setSceneReady(false)
-        }
-    }, [setSceneReady, theme])
+    }, [viewMode])
 
     return (
         <div className="operations-hub" ref={containerRef}>
-            {/* Three.js child components */}
-            {sceneRef.current && (
-                <>
-                    <GlobeScene
-                        ref={globeRef}
-                        scene={sceneRef.current}
-                        isDark={isDark}
-                        autoRotate={viewMode === 'global' && !isTransitioning}
-                    />
-                    <ClusterMarkers
-                        ref={clusterMarkersRef}
-                        scene={sceneRef.current}
-                        clusters={GLOBAL_CLUSTERS}
-                        onClusterHover={setHoveredCluster}
-                        isDark={isDark}
-                    />
-                    {tilesApiKey ? (
-                        <PhotorealisticTiles
-                            ref={photorealisticTilesRef}
-                            scene={sceneRef.current}
-                            camera={cameraRef.current}
-                            renderer={rendererRef.current}
-                            apiKey={tilesApiKey}
-                            visible={viewMode === 'singapore' || isTransitioning}
-                        />
-                    ) : (
-                        <SingaporeMap
-                            ref={singaporeMapRef}
-                            scene={sceneRef.current}
-                            isDark={isDark}
-                            visible={viewMode === 'singapore' || isTransitioning}
-                        />
-                    )}
-                </>
-            )}
+            {/* Google Maps 3D container */}
+            <div
+                ref={mapContainerRef}
+                style={{ position: 'absolute', inset: 0, zIndex: 0 }}
+            />
 
             {/* UI Overlay */}
             <SceneOverlay
@@ -301,17 +515,51 @@ export default function OperationsHub() {
             />
 
             {/* Hover Tooltip */}
-            {hoveredCluster && (
-                <div className="operations-hub__tooltip">
-                    <span className="operations-hub__tooltip-type">{hoveredCluster.country}</span>
-                    <span className="operations-hub__tooltip-name">{hoveredCluster.name}</span>
-                    <span className="operations-hub__tooltip-count">{hoveredCluster.count} incidents</span>
-                </div>
-            )}
-
-            {showTilesAttribution && (
-                <div className="operations-hub__attribution">
-                    © Google • Photorealistic 3D Tiles
+            {hoveredItem && (
+                <div
+                    className="operations-hub__tooltip operations-hub__tooltip--dynamic"
+                    style={{
+                        left: `${tooltipPosition.x}px`,
+                        top: `${tooltipPosition.y - 10}px`,
+                        transform: 'translate(-50%, -100%)'
+                    }}
+                >
+                    {hoveredItem.type === 'cluster' ? (
+                        <>
+                            <span className="operations-hub__tooltip-type">
+                                CLUSTER · {(hoveredItem.data as ClusterData).category.toUpperCase()}
+                            </span>
+                            <span className="operations-hub__tooltip-name">
+                                {(hoveredItem.data as ClusterData).location_label || (hoveredItem.data as ClusterData).zone_id}
+                            </span>
+                            <div className="operations-hub__tooltip-stats">
+                                <span>{(hoveredItem.data as ClusterData).complaint_count} complaints</span>
+                                <span className="operations-hub__tooltip-divider">•</span>
+                                <span>Severity: {Math.round((hoveredItem.data as ClusterData).severity_score || 0)}</span>
+                            </div>
+                            <span className="operations-hub__tooltip-state">
+                                {(hoveredItem.data as ClusterData).state}
+                            </span>
+                        </>
+                    ) : (
+                        <>
+                            <span className="operations-hub__tooltip-type">
+                                COMPLAINT · {(hoveredItem.data as ComplaintData).category_pred?.toUpperCase() || 'UNKNOWN'}
+                            </span>
+                            <span className="operations-hub__tooltip-name">
+                                {(hoveredItem.data as ComplaintData).location_label}
+                            </span>
+                            <span className="operations-hub__tooltip-text">
+                                {(hoveredItem.data as ComplaintData).text?.substring(0, 80)}
+                                {(hoveredItem.data as ComplaintData).text?.length > 80 ? '...' : ''}
+                            </span>
+                            <div className="operations-hub__tooltip-stats">
+                                <span>Severity: {(hoveredItem.data as ComplaintData).severity_pred || 'N/A'}</span>
+                                <span className="operations-hub__tooltip-divider">•</span>
+                                <span>{(hoveredItem.data as ComplaintData).status}</span>
+                            </div>
+                        </>
+                    )}
                 </div>
             )}
         </div>

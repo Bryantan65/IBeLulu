@@ -67,14 +67,12 @@ export function useCameraTransition() {
                 ease: 'power2.inOut',
             }, 0)
 
-            // 2. Fade out Globe, Fade in Singapore Map
+            // 2. Fade out Globe and Markers — hide completely so they don't overlap tiles
             if (globeGroup) {
-                tl.to(globeGroup.scale, { x: 0.8, y: 0.8, z: 0.8, duration: 1 }, 1.2)
-                tl.to(globeGroup.position, { y: -2, duration: 1 }, 1.2) // Drop down effect
+                tl.to(globeGroup.scale, { x: 0.01, y: 0.01, z: 0.01, duration: 1, ease: 'power2.in', onComplete: () => { globeGroup.visible = false } }, 1.0)
             }
             if (markersGroup) {
-                tl.to(markersGroup.scale, { x: 0.8, y: 0.8, z: 0.8, duration: 1 }, 1.2)
-                tl.to(markersGroup.position, { y: -2, duration: 1 }, 1.2)
+                tl.to(markersGroup.scale, { x: 0.01, y: 0.01, z: 0.01, duration: 1, ease: 'power2.in', onComplete: () => { markersGroup.visible = false } }, 1.0)
             }
 
             if (singaporeGroup) {
@@ -97,7 +95,7 @@ export function useCameraTransition() {
             }
 
             // 3. Re-orient camera for flat map view (Singapore Mode)
-            // Tilted view: Positioned somewhat above and south
+            // Top-down angled view looking at Singapore (scene origin = Singapore)
             tl.to(controls.target, {
                 x: 0,
                 y: 0,
@@ -108,8 +106,8 @@ export function useCameraTransition() {
 
             tl.to(camera.position, {
                 x: 0,
-                y: 4, // Altitude
-                z: 6, // Distance
+                y: 15, // Higher altitude for better overview of tiles
+                z: 10,
                 duration: 1.5,
                 ease: 'power2.inOut',
             }, 1.5)
@@ -153,12 +151,12 @@ export function useCameraTransition() {
             // 3. Bring back Globe
             if (globeGroup) {
                 globeGroup.visible = true
-                tl.to(globeGroup.position, { y: 0, duration: 1, ease: 'power2.out' }, 0.5)
+                globeGroup.scale.set(0.01, 0.01, 0.01)
                 tl.to(globeGroup.scale, { x: 1, y: 1, z: 1, duration: 1, ease: 'elastic.out(1, 0.75)' }, 0.5)
             }
             if (markersGroup) {
                 markersGroup.visible = true
-                tl.to(markersGroup.position, { y: 0, duration: 1, ease: 'power2.out' }, 0.5)
+                markersGroup.scale.set(0.01, 0.01, 0.01)
                 tl.to(markersGroup.scale, { x: 1, y: 1, z: 1, duration: 1, ease: 'elastic.out(1, 0.75)' }, 0.5)
             }
 
