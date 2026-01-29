@@ -147,12 +147,22 @@ def store_assistant_reply(user_id: int, reply_text: str) -> None:
 
 def send_telegram_message(chat_id: int, text: str, parse_mode: str = 'Markdown') -> None:
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    http_request(
-        url,
-        method='POST',
-        headers={'Content-Type': 'application/json'},
-        body={'chat_id': chat_id, 'text': text, 'parse_mode': parse_mode},
-    )
+    try:
+        http_request(
+            url,
+            method='POST',
+            headers={'Content-Type': 'application/json'},
+            body={'chat_id': chat_id, 'text': text, 'parse_mode': parse_mode},
+        )
+    except Exception as exc:
+        # Telegram often throws 400 if Markdown can't parse entities; retry without formatting.
+        log(f'Telegram sendMessage failed ({parse_mode}): {exc}. Retrying without parse_mode.')
+        http_request(
+            url,
+            method='POST',
+            headers={'Content-Type': 'application/json'},
+            body={'chat_id': chat_id, 'text': text},
+        )
 
 
 def save_complaint_to_supabase(text: str, telegram_user_id: int, telegram_username: Optional[str]) -> Optional[str]:

@@ -38,12 +38,20 @@
 
 /* Variants */
 .btn--primary {
-    background: var(--color-primary);
+    background: #16a34a;
     color: var(--color-text-inverse);
 }
 
 .btn--primary:hover:not(:disabled) {
-    background: var(--color-primary-hover);
+    background: #10b981 !important;
+}
+
+[data-theme="light"] .btn--primary:hover:not(:disabled) {
+    background: #10b981 !important;
+}
+
+[data-theme="dark"] .btn--primary:hover:not(:disabled) {
+    background: #10b981 !important;
 }
 
 .btn--primary:active:not(:disabled) {
@@ -51,12 +59,35 @@
 }
 
 .btn--secondary {
-    background: var(--color-secondary);
+    background: #f59e0b;
     color: var(--color-text-inverse);
 }
 
 .btn--secondary:hover:not(:disabled) {
-    background: var(--color-secondary-hover);
+    background: #d97706 !important;
+}
+
+[data-theme="light"] .btn--secondary:hover:not(:disabled) {
+    background: #d97706 !important;
+}
+
+[data-theme="dark"] .btn--secondary:hover:not(:disabled) {
+    background: #d97706 !important;
+}
+
+.btn--ghost:hover:not(:disabled) {
+    background: #b91c1c !important;
+    color: white !important;
+}
+
+[data-theme="light"] .btn--ghost:hover:not(:disabled) {
+    background: #b91c1c !important;
+    color: white !important;
+}
+
+[data-theme="dark"] .btn--ghost:hover:not(:disabled) {
+    background: #b91c1c !important;
+    color: white !important;
 }
 
 .btn--secondary:active:not(:disabled) {
@@ -75,7 +106,8 @@
 
 .btn--ghost {
     background: transparent;
-    color: var(--color-text-secondary);
+    color: #dc2626;
+    border: 1px solid #dc2626;
 }
 
 .btn--ghost:hover:not(:disabled) {

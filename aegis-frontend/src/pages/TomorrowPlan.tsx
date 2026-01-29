@@ -68,9 +68,18 @@ export default function TomorrowPlan() {
         googleMapsApiKey: GOOGLE_MAPS_API_KEY
     })
 
+    const normalizeZoneKey = (value: string) =>
+        value
+            .trim()
+            .toUpperCase()
+            .replace(/[^A-Z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '')
+
     const getZoneCoordinate = (zoneId: string) => {
+        const normalized = normalizeZoneKey(zoneId)
         if (ZONE_COORDINATES[zoneId]) return ZONE_COORDINATES[zoneId]
-        const parts = zoneId.split('_')
+        if (ZONE_COORDINATES[normalized]) return ZONE_COORDINATES[normalized]
+        const parts = normalized.split('_')
         for (let i = parts.length; i > 0; i--) {
             const key = parts.slice(0, i).join('_')
             if (ZONE_COORDINATES[key]) return ZONE_COORDINATES[key]
@@ -157,7 +166,23 @@ export default function TomorrowPlan() {
         setInput('')
         setChatLoading(true)
         try {
-            const responseText = await sendMessageToAgent([...messages, userMessage], FORECAST_AGENT_ID)
+            const forecastContext = {
+                date: getTomorrowDate(),
+                weather: weatherSummary,
+                forecasts: forecasts.map((forecast) => ({
+                    zone_id: forecast.zone_id,
+                    predicted_category: forecast.predicted_category,
+                    risk_score: forecast.risk_score,
+                    reason: forecast.reason
+                }))
+            }
+            const contextMessage: ChatMessage = {
+                role: 'user',
+                text:
+                    'Use ONLY this forecast data when answering (do not invent new zones). ' +
+                    `Forecast context: ${JSON.stringify(forecastContext)}`
+            }
+            const responseText = await sendMessageToAgent([contextMessage, ...messages, userMessage], FORECAST_AGENT_ID)
             setMessages(prev => [...prev, { role: 'assistant', text: responseText }])
         } catch (error) {
             setMessages(prev => [...prev, { role: 'assistant', text: "I'm having trouble connecting right now." }])
