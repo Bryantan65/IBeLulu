@@ -27,7 +27,7 @@ export default function Evidence() {
 
             console.log('Fetching tasks from:', `${SUPABASE_URL}/rest/v1/tasks`)
             
-            const response = await fetch(`${SUPABASE_URL}/rest/v1/tasks?select=*,clusters(*)`, {
+            const response = await fetch(`${SUPABASE_URL}/rest/v1/tasks?select=*,clusters(*)&status=eq.DONE`, {
                 headers: {
                     'apikey': SUPABASE_ANON_KEY,
                     'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
@@ -232,7 +232,18 @@ export default function Evidence() {
 
             if (!taskResp.ok) throw new Error('Failed to update task status')
 
-            // 4. Update cluster state to CLOSED
+            // 4. Update run_sheet status to completed
+            const runSheetResp = await fetch(`${SUPABASE_URL}/rest/v1/run_sheets?id=in.(select run_sheet_id from run_sheet_tasks where task_id='${item.taskId}')`, {
+                method: 'PATCH',
+                headers: {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ status: 'completed' })
+            })
+
+            // 5. Update cluster state to CLOSED
             const taskData = await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${item.taskId}&select=cluster_id`, {
                 headers: {
                     'apikey': SUPABASE_ANON_KEY,
@@ -298,7 +309,7 @@ export default function Evidence() {
                     'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ status: 'PLANNED' })
+                body: JSON.stringify({ status: 'REVIEWED' })
             })
 
             // 3. Update cluster state to REVIEWED
@@ -322,7 +333,18 @@ export default function Evidence() {
                 })
             }
 
-            // 4. Remove from run_sheet
+            // 4. Update run_sheet status back to draft
+            const runSheetResp = await fetch(`${SUPABASE_URL}/rest/v1/run_sheets?id=in.(select run_sheet_id from run_sheet_tasks where task_id='${item.taskId}')`, {
+                method: 'PATCH',
+                headers: {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ status: 'draft' })
+            })
+
+            // 5. Remove from run_sheet
             await fetch(`${SUPABASE_URL}/rest/v1/run_sheet_tasks?task_id=eq.${item.taskId}`, {
                 method: 'DELETE',
                 headers: {
