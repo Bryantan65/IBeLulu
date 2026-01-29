@@ -35,7 +35,7 @@ const navGroups: { title: string; items: NavItem[] }[] = [
             { label: 'Dashboard', icon: <LayoutDashboard size={20} />, href: '/' },
             { label: 'Complaints', icon: <MessageSquareWarning size={20} />, href: '/complaints' },
             { label: 'Hotspots', icon: <MapPin size={20} />, href: '/hotspots' },
-            { label: 'Review Queue', icon: <ClipboardCheck size={20} />, href: '/review', badge: 3 },
+            { label: 'Review Queue', icon: <ClipboardCheck size={20} />, href: '/review' },
         ],
     },
     {

@@ -28,7 +28,6 @@ export default function TopNav({ title, subtitle, onMobileMenuToggle }: TopNavPr
             <div className="topnav__actions">
                 <button className="topnav__icon-btn topnav__notification">
                     <Bell size={20} />
-                    <span className="topnav__notification-badge">3</span>
                 </button>
 
                 <button
