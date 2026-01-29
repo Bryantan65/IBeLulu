@@ -5,7 +5,7 @@ import { MapPin, AlertTriangle, ClipboardCheck, RefreshCw, Shield, X, Loader2, C
 import { sendMessageToAgent, ChatMessage } from '../services/orchestrate'
 import './Hotspots.css'
 
-import { GoogleMap, useJsApiLoader, Marker, MarkerClusterer, Circle } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, Marker, MarkerClusterer } from '@react-google-maps/api';
 import { getLatLngForLocation } from '../utils/geocode';
 import { customMapStyle, darkMapStyle, lightMapStyle } from '../components/three/globe/MapTheme';
 
@@ -113,6 +113,20 @@ const MAP_THEMES = {
     light: lightMapStyle,
 };
 
+function getMarkerIcon(severity: number) {
+    const color = severity >= 4 ? '#ef4444' : severity >= 3 ? '#f59e0b' : '#10b981'
+    const maps = (window as any).google?.maps
+    if (!maps) return undefined
+    return {
+        path: maps.SymbolPath.CIRCLE,
+        fillColor: color,
+        fillOpacity: 0.9,
+        strokeColor: '#111827',
+        strokeWeight: 1,
+        scale: 6 + Math.max(0, Math.min(3, severity))
+    }
+}
+
 export default function Hotspots() {
     const navigate = useNavigate()
     const [clusters, setClusters] = useState<Cluster[]>([])
@@ -133,7 +147,7 @@ export default function Hotspots() {
 
     const fetchClusters = async () => {
         try {
-            const response = await fetch(`${SUPABASE_URL}/rest/v1/clusters?select=id,category,zone_id,state,severity_score,priority_score,created_at,description,complaint_count&order=severity_score.desc`, {
+            const response = await fetch(`${SUPABASE_URL}/rest/v1/clusters?select=id,category,zone_id,state,severity_score,priority_score,created_at,description,complaint_count&state=eq.TRIAGED&order=severity_score.desc`, {
                 headers: {
                     'apikey': SUPABASE_ANON_KEY,
                     'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
@@ -386,24 +400,21 @@ NO markdown formatting. NO backticks. ONLY the JSON array.`
                             }}
                         >
                             {clusterPositions.length > 0 && (
-                                clusterPositions.map((c) => (
-                                    <Circle
-                                        key={c.id}
-                                        center={{ lat: c.lat, lng: c.lng }}
-                                        radius={200 + (c.severity_score * 50)}
-                                        options={{
-                                            fillColor: c.severity_score >= 4 ? '#ef4444' : c.severity_score >= 3 ? '#f59e0b' : '#10b981',
-                                            fillOpacity: 0.6,
-                                            strokeColor: c.severity_score >= 4 ? '#dc2626' : c.severity_score >= 3 ? '#d97706' : '#059669',
-                                            strokeOpacity: 0.8,
-                                            strokeWeight: 2,
-                                            clickable: true
-                                        }}
-                                        onClick={() => {
-                                            handleClusterClick(c.id, c.lat, c.lng);
-                                        }}
-                                    />
-                                ))
+                                <MarkerClusterer>
+                                    {(clusterer) => (
+                                        <>
+                                            {clusterPositions.map((c) => (
+                                                <Marker
+                                                    key={c.id}
+                                                    position={{ lat: c.lat, lng: c.lng }}
+                                                    clusterer={clusterer}
+                                                    icon={getMarkerIcon(c.severity_score)}
+                                                    onClick={() => handleClusterClick(c.id, c.lat, c.lng)}
+                                                />
+                                            ))}
+                                        </>
+                                    )}
+                                </MarkerClusterer>
                             )}
                         </GoogleMap>
                         
