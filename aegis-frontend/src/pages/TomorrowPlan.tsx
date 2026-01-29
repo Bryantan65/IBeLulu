@@ -65,7 +65,6 @@ export default function TomorrowPlan() {
     const mapContainerRef = useRef<HTMLDivElement>(null)
 
     const { isLoaded: isGoogleMapsLoaded, loadError } = useJsApiLoader({
-        id: 'google-maps-script',
         googleMapsApiKey: GOOGLE_MAPS_API_KEY
     })
 
@@ -181,6 +180,10 @@ export default function TomorrowPlan() {
         else newSet.add(id)
         setSelectedTasks(newSet)
     }
+
+    const overflowRiskCount = forecasts.filter((forecast) =>
+        forecast.predicted_category.includes('overflow')
+    ).length
 
     const handleZoomToSingapore = () => {
         if (mapView === 'google' && googleMap) {
@@ -401,6 +404,18 @@ export default function TomorrowPlan() {
                             </div>
                         )}
                     </div>
+                </div>
+                <div className="tomorrow-plan__environment">
+                    <div className="tomorrow-plan__environment-title">Environmental Impact (Proxy)</div>
+                    <div className="tomorrow-plan__environment-grid">
+                        <div className="tomorrow-plan__environment-card">
+                            <span className="tomorrow-plan__environment-value">{overflowRiskCount}</span>
+                            <span className="tomorrow-plan__environment-label">Potential Overflows Avoided</span>
+                        </div>
+                    </div>
+                    <p className="tomorrow-plan__environment-note">
+                        Proxy based on forecasted overflow hotspots and proactive inspection coverage.
+                    </p>
                 </div>
             </Card>
 

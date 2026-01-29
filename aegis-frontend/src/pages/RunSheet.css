@@ -36,6 +36,50 @@
     gap: var(--space-3);
 }
 
+/* Environmental Impact */
+.runsheet__environment {
+    padding: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border-subtle);
+}
+
+.runsheet__environment-title {
+    font-size: var(--text-sm);
+    font-weight: var(--font-semibold);
+    color: var(--color-text);
+}
+
+.runsheet__environment-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--space-2);
+}
+
+.runsheet__environment-card {
+    background: var(--color-surface-1);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    border: 1px solid var(--color-border-subtle);
+}
+
+.runsheet__environment-value {
+    font-size: var(--text-xl);
+    font-weight: var(--font-bold);
+    color: var(--color-primary);
+}
+
+.runsheet__environment-label,
+.runsheet__environment-note {
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+}
+
 /* Teams */
 .runsheet__teams {
     display: grid;
