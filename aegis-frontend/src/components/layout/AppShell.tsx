@@ -12,7 +12,6 @@ const pageTitles: Record<string, { title: string; subtitle?: string }> = {
     '/runsheet': { title: 'Run Sheet', subtitle: 'Daily dispatch plan' },
     '/evidence': { title: 'Evidence', subtitle: 'Verification pending' },
     '/forecast': { title: 'Tomorrow Plan', subtitle: 'Proactive forecast' },
-    '/simulator': { title: 'What-If', subtitle: 'Scenario analysis' },
     '/outcomes': { title: 'Outcomes', subtitle: 'Performance metrics' },
 }
 
