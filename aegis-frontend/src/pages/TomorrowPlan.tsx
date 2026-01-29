@@ -65,7 +65,6 @@ export default function TomorrowPlan() {
     const mapContainerRef = useRef<HTMLDivElement>(null)
 
     const { isLoaded: isGoogleMapsLoaded, loadError } = useJsApiLoader({
-        id: 'google-maps-script',
         googleMapsApiKey: GOOGLE_MAPS_API_KEY
     })
 
