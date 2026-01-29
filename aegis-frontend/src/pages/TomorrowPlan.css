@@ -102,6 +102,56 @@
     border: 0;
 }
 
+/* Environmental Impact */
+.tomorrow-plan__environment {
+    margin-top: var(--space-4);
+    padding: var(--space-3);
+    background: var(--color-surface-2);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.tomorrow-plan__environment-title {
+    font-size: var(--text-sm);
+    font-weight: var(--font-semibold);
+    color: var(--color-text);
+}
+
+.tomorrow-plan__environment-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--space-2);
+}
+
+.tomorrow-plan__environment-card {
+    background: var(--color-surface-1);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    border: 1px solid var(--color-border-subtle);
+}
+
+.tomorrow-plan__environment-value {
+    font-size: var(--text-xl);
+    font-weight: var(--font-bold);
+    color: var(--color-primary);
+}
+
+.tomorrow-plan__environment-label {
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+}
+
+.tomorrow-plan__environment-note {
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+}
+
 .tomorrow-plan__google-map,
 .tomorrow-plan__google-map-inner {
     position: absolute;
