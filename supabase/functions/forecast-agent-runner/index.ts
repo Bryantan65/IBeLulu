@@ -60,12 +60,7 @@ Deno.serve(async (req) => {
     const weatherRes = await fetch(`${supabaseUrl}/functions/v1/get-weather`, {
       headers: { "Content-Type": "application/json" },
     })
-
-    if (!weatherRes.ok) {
-      console.warn(`Weather API failed (${weatherRes.status}), using defaults`)
-    }
-
-    const weatherData = weatherRes.ok ? await weatherRes.json() : {}
+    const weatherData = await weatherRes.json()
 
     // Parse weather from Singapore API format
     const forecastData = weatherData.forecasts?.[0] || {}
@@ -165,25 +160,10 @@ Deno.serve(async (req) => {
     const recentClusters = clusters || []
     console.log(`✅ Found ${recentClusters.length} recent clusters`)
 
-    // 5. Determine target date (from request or default to tomorrow)
-    let tomorrowDate: string | null = null
-
-    try {
-      // Clone the request to avoid consuming the body if we need it later (though we don't here)
-      // or just try/catch the json parse
-      const body = await req.json()
-      if (body?.date) {
-        tomorrowDate = body.date
-      }
-    } catch {
-      // Request body might be empty or invalid JSON, ignore
-    }
-
-    if (!tomorrowDate) {
-      const tomorrow = new Date()
-      tomorrow.setDate(tomorrow.getDate() + 1)
-      tomorrowDate = tomorrow.toISOString().split("T")[0]
-    }
+    // 5. Get tomorrow's date
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const tomorrowDate = tomorrow.toISOString().split("T")[0]
 
     // 6. Call IBM Watsonx Forecast Agent
     console.log("🤖 Calling Forecast Agent...")
@@ -200,15 +180,11 @@ Deno.serve(async (req) => {
       }
     )
 
-    if (!tokenRes.ok) {
-      throw new Error(`Failed to get IBM Watson token: ${tokenRes.statusText}`)
-    }
-
     const tokenData = await tokenRes.json()
     const watsonToken = tokenData.token
 
     if (!watsonToken) {
-      throw new Error("Failed to get IBM Watson token from response")
+      throw new Error("Failed to get IBM Watson token")
     }
 
     // Build agent input
@@ -223,12 +199,8 @@ Deno.serve(async (req) => {
 
     // Call Watsonx agent
     // Using same pattern as complaints agent
-    const FORECAST_AGENT_ID = Deno.env.get("FORECAST_AGENT_ID")
-    const INSTANCE_ID = Deno.env.get("WATSON_INSTANCE_ID")
-
-    if (!FORECAST_AGENT_ID || !INSTANCE_ID) {
-      throw new Error("Missing Watson Agent ID or Instance ID configuration")
-    }
+    const FORECAST_AGENT_ID = Deno.env.get("FORECAST_AGENT_ID") || "b897af4a-759f-4bf9-8163-fa66ceb97a0c"
+    const INSTANCE_ID = Deno.env.get("WATSON_INSTANCE_ID") || "20260126-1332-1571-30ef-acf1a3847d97"
 
     const agentUrl = `https://ap-southeast-1.dl.watson-orchestrate.ibm.com/instances/${INSTANCE_ID}/v1/orchestrate/${FORECAST_AGENT_ID}/chat/completions`
 
@@ -282,8 +254,6 @@ Deno.serve(async (req) => {
       const jsonMatch = agentMessage.match(/\[[\s\S]*\]/)
       if (jsonMatch) {
         forecasts = JSON.parse(jsonMatch[0])
-      } else {
-        console.warn("No JSON array found in agent response")
       }
     }
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Button, Badge, Card } from '../components/ui'
-import { CloudRain, Thermometer, Droplets, Plus, Loader2, Bot, Send, X, MessageSquare } from 'lucide-react'
+import { CloudRain, Thermometer, Droplets, Plus, Loader2, Bot, Send, X, MessageSquare, User } from 'lucide-react'
 import { sendMessageToAgent, ChatMessage } from '../services/orchestrate'
 import './TomorrowPlan.css'
 
@@ -141,6 +141,71 @@ export default function TomorrowPlan() {
                 </div>
             </div>
 
+            {/* Collapsible Chat Section */}
+            <div className={`tomorrow-plan-chat-collapsible ${showChat ? 'open' : ''}`}>
+                <Card className="h-[500px] shadow-lg" padding="none">
+                    <div className="tomorrow-plan-chat__container">
+                        <div className="tomorrow-plan-chat__header">
+                            <div className="tomorrow-plan-chat__title">
+                                <Bot size={20} className="text-primary" />
+                                <span>Chat with Forecast Agent</span>
+                            </div>
+                            <button onClick={() => setShowChat(false)} className="tomorrow-plan-chat__close">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="tomorrow-plan-chat__messages">
+                            {messages.length === 0 && (
+                                <div className="tomorrow-plan-chat__empty">
+                                    <Bot size={48} />
+                                    <p>Ask me about tomorrow's risks or weather.</p>
+                                </div>
+                            )}
+                            {messages.map((msg, i) => (
+                                <div key={i} className={`tomorrow-plan-chat__message tomorrow-plan-chat__message--${msg.role}`}>
+                                    <div className="tomorrow-plan-chat__avatar">
+                                        {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
+                                    </div>
+                                    <div className="tomorrow-plan-chat__bubble">
+                                        {msg.text}
+                                    </div>
+                                </div>
+                            ))}
+                            {chatLoading && (
+                                <div className="tomorrow-plan-chat__message tomorrow-plan-chat__message--assistant">
+                                    <div className="tomorrow-plan-chat__avatar">
+                                        <Bot size={16} />
+                                    </div>
+                                    <div className="tomorrow-plan-chat__bubble tomorrow-plan-chat__bubble--loading">
+                                        <Loader2 size={16} className="animate-spin" />
+                                    </div>
+                                </div>
+                            )}
+                            <div ref={messagesEndRef} />
+                        </div>
+
+                        <div className="tomorrow-plan-chat__input-area">
+                            <input
+                                className="tomorrow-plan-chat__input"
+                                placeholder="Type a message..."
+                                value={input}
+                                onChange={(e) => setInput(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') handleSend() }}
+                                disabled={chatLoading}
+                            />
+                            <button
+                                className="tomorrow-plan-chat__send-btn"
+                                onClick={() => handleSend()}
+                                disabled={!input.trim() || chatLoading}
+                            >
+                                <Send size={18} />
+                            </button>
+                        </div>
+                    </div>
+                </Card>
+            </div>
+
             {/* Weather Signal */}
             <Card className="tomorrow-plan__weather">
                 <h3>Weather Outlook</h3>
@@ -229,62 +294,6 @@ export default function TomorrowPlan() {
                 <strong>Reactive (8) + Proactive ({forecasts.length}) = {8 + forecasts.length} Tasks</strong>
             </Card>
 
-            {/* Chat Modal */}
-            {showChat && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowChat(false)}>
-                    <Card className="w-full max-w-md h-[600px] flex flex-col shadow-2xl animate-in fade-in zoom-in-95 duration-200" padding="none" onClick={(e) => e.stopPropagation()}>
-                        <div className="p-4 border-b flex justify-between items-center bg-card">
-                            <div className="flex items-center gap-2">
-                                <Bot size={20} className="text-primary" />
-                                <span className="font-semibold">Chat with Forecast Agent</span>
-                            </div>
-                            <button onClick={() => setShowChat(false)} className="text-neutral-500 hover:text-neutral-900 transition-colors">
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                            {messages.length === 0 && (
-                                <div className="text-center text-neutral-500 mt-8">
-                                    <Bot size={32} className="mx-auto mb-2 opacity-50" />
-                                    <p>Ask me about tomorrow's risks or weather.</p>
-                                </div>
-                            )}
-                            {messages.map((msg, i) => (
-                                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-[80%] rounded-lg p-3 text-sm ${msg.role === 'user'
-                                        ? 'bg-primary text-primary-foreground'
-                                        : 'bg-muted text-foreground'
-                                        }`}>
-                                        {msg.text}
-                                    </div>
-                                </div>
-                            ))}
-                            {chatLoading && (
-                                <div className="flex justify-start">
-                                    <div className="bg-muted p-3 rounded-lg"><Loader2 size={16} className="animate-spin" /></div>
-                                </div>
-                            )}
-                            <div ref={messagesEndRef} />
-                        </div>
-
-                        <div className="p-4 border-t bg-card">
-                            <div className="flex gap-2">
-                                <input
-                                    className="flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 bg-background"
-                                    placeholder="Type a message..."
-                                    value={input}
-                                    onChange={(e) => setInput(e.target.value)}
-                                    onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') handleSend() }}
-                                />
-                                <Button size="sm" onClick={() => handleSend()} disabled={!input.trim() || chatLoading} icon={<Send size={16} />}>
-                                    Send
-                                </Button>
-                            </div>
-                        </div>
-                    </Card>
-                </div>
-            )}
         </div>
     )
 }
