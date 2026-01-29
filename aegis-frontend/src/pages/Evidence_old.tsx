@@ -142,9 +142,9 @@ export default function Evidence() {
 
         const fm = filesMap[itemId]
         
-        // Check if BOTH images are uploaded
-        if (!fm?.beforeFile || !fm?.afterFile) {
-            pushToast('Please upload both before and after images before verifying', 'error')
+        // Check if at least one image is uploaded
+        if (!fm?.beforeFile && !fm?.afterFile) {
+            pushToast('Please upload at least one image before verifying', 'error')
             return
         }
 
@@ -152,16 +152,18 @@ export default function Evidence() {
         setFilesMap((s) => ({ ...(s), [itemId]: { ...(s[itemId] || {}), uploading: true } }))
 
         try {
+            let beforeUrl = item.beforeImage
+            let afterUrl = item.afterImage
+
             const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
             const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-            // 1. Upload images
             const fd = new FormData()
             fd.append('taskId', item.taskId)
-            fd.append('before', fm.beforeFile as File)
-            fd.append('after', fm.afterFile as File)
+            if (fm?.beforeFile) fd.append('before', fm.beforeFile as File)
+            if (fm?.afterFile) fd.append('after', fm.afterFile as File)
 
-            const uploadResp = await fetch(`${SUPABASE_URL}/functions/v1/evidence-upload`, {
+            const resp = await fetch(`${SUPABASE_URL}/functions/v1/evidence-upload`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
@@ -169,157 +171,28 @@ export default function Evidence() {
                 body: fd,
             })
 
-            if (!uploadResp.ok) {
-                const text = await uploadResp.text()
-                throw new Error(`Upload failed: ${uploadResp.status} ${text}`)
+            if (!resp.ok) {
+                const text = await resp.text()
+                throw new Error(`Upload failed: ${resp.status} ${text}`)
             }
 
-            const uploadData = await uploadResp.json()
+            const data = await resp.json()
+            if (data.beforeUrl) beforeUrl = data.beforeUrl
+            if (data.afterUrl) afterUrl = data.afterUrl
+
+            // Update local state to show stored URLs and mark VERIFIED
+            setEvidence((arr) => arr.map((it) => (it.id === itemId ? { ...it, beforeImage: beforeUrl, afterImage: afterUrl, status: 'VERIFIED' } : it)))
             
-            // 2. Create evidence record
-            const evidenceResp = await fetch(`${SUPABASE_URL}/rest/v1/evidence`, {
-                method: 'POST',
-                headers: {
-                    'apikey': SUPABASE_ANON_KEY,
-                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    task_id: item.taskId,
-                    before_image_url: uploadData.beforeUrl,
-                    after_image_url: uploadData.afterUrl,
-                    submitted_by: 'Supervisor',
-                    notes: 'Task verified and completed'
-                })
-            })
-
-            if (!evidenceResp.ok) throw new Error('Failed to create evidence record')
-
-            // 3. Update task status to VERIFIED
-            const taskResp = await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${item.taskId}`, {
-                method: 'PATCH',
-                headers: {
-                    'apikey': SUPABASE_ANON_KEY,
-                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ status: 'VERIFIED' })
-            })
-
-            if (!taskResp.ok) throw new Error('Failed to update task status')
-
-            // 4. Update cluster state to CLOSED
-            const taskData = await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${item.taskId}&select=cluster_id`, {
-                headers: {
-                    'apikey': SUPABASE_ANON_KEY,
-                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-                }
-            })
-            
-            const taskInfo = await taskData.json()
-            if (taskInfo[0]?.cluster_id) {
-                await fetch(`${SUPABASE_URL}/rest/v1/clusters?id=eq.${taskInfo[0].cluster_id}`, {
-                    method: 'PATCH',
-                    headers: {
-                        'apikey': SUPABASE_ANON_KEY,
-                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ state: 'CLOSED' })
-                })
-            }
-
-            setEvidence((arr) => arr.map((it) => (it.id === itemId ? { ...it, status: 'VERIFIED' } : it)))
+            // Clear file entries and images on success
             setFilesMap((s) => ({ ...(s), [itemId]: { beforeFile: null, afterFile: null, uploading: false } }))
             
             setLoadingItems(prev => { const next = new Set(prev); next.delete(itemId); return next })
-            pushToast('Evidence verified and task completed successfully', 'success')
-            
-            // Reload page to refresh task list
-            setTimeout(() => {
-                window.location.reload()
-            }, 1500)
+            pushToast('Evidence verified and uploaded successfully', 'success')
         } catch (err) {
-            console.error('Verification error', err)
+            console.error('Upload error', err)
             setFilesMap((s) => ({ ...(s), [itemId]: { ...(s[itemId] || {}), uploading: false } }))
             setLoadingItems(prev => { const next = new Set(prev); next.delete(itemId); return next })
             pushToast('Failed to verify evidence. Please try again.', 'error')
-        }
-    }
-
-    async function returnForRework(itemId: string) {
-        const item = evidence.find((e) => e.id === itemId)
-        if (!item) return
-
-        setLoadingItems(prev => new Set(prev).add(itemId))
-
-        try {
-            const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
-            const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
-
-            // 1. Delete existing evidence records
-            await fetch(`${SUPABASE_URL}/rest/v1/evidence?task_id=eq.${item.taskId}`, {
-                method: 'DELETE',
-                headers: {
-                    'apikey': SUPABASE_ANON_KEY,
-                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-                }
-            })
-
-            // 2. Update task status to PLANNED
-            await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${item.taskId}`, {
-                method: 'PATCH',
-                headers: {
-                    'apikey': SUPABASE_ANON_KEY,
-                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ status: 'PLANNED' })
-            })
-
-            // 3. Update cluster state to REVIEWED
-            const taskData = await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${item.taskId}&select=cluster_id`, {
-                headers: {
-                    'apikey': SUPABASE_ANON_KEY,
-                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-                }
-            })
-            
-            const taskInfo = await taskData.json()
-            if (taskInfo[0]?.cluster_id) {
-                await fetch(`${SUPABASE_URL}/rest/v1/clusters?id=eq.${taskInfo[0].cluster_id}`, {
-                    method: 'PATCH',
-                    headers: {
-                        'apikey': SUPABASE_ANON_KEY,
-                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ state: 'REVIEWED' })
-                })
-            }
-
-            // 4. Remove from run_sheet
-            await fetch(`${SUPABASE_URL}/rest/v1/run_sheet_tasks?task_id=eq.${item.taskId}`, {
-                method: 'DELETE',
-                headers: {
-                    'apikey': SUPABASE_ANON_KEY,
-                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-                }
-            })
-
-            setEvidence((arr) => arr.filter((it) => it.id !== itemId))
-            setFilesMap((s) => {
-                const newMap = { ...s }
-                delete newMap[itemId]
-                return newMap
-            })
-            
-            setLoadingItems(prev => { const next = new Set(prev); next.delete(itemId); return next })
-            pushToast('Task returned for rework and will be re-dispatched', 'success')
-        } catch (err) {
-            console.error('Rework error', err)
-            setLoadingItems(prev => { const next = new Set(prev); next.delete(itemId); return next })
-            pushToast('Failed to return task for rework. Please try again.', 'error')
         }
     }
 
@@ -435,7 +308,7 @@ export default function Evidence() {
                             <Button variant="primary" icon={<Check size={16} />} onClick={() => verifyAndClose(item.id)}>
                                 Verify & Close
                             </Button>
-                            <Button variant="secondary" icon={<RotateCcw size={16} />} onClick={() => returnForRework(item.id)}>
+                            <Button variant="secondary" icon={<RotateCcw size={16} />}>
                                 Return for Rework
                             </Button>
                             <Button variant="ghost" icon={<Flag size={16} />}>

@@ -167,7 +167,7 @@ Transitions:
 - requires_approval, dispatch_message_id?
 
 ### evidence
-- id, task_id, photo_url/file_path, notes, submitted_at, submitted_by
+- id, task_id, before_image_url, after_image_url, file_path, notes, submitted_at, submitted_by
 
 ### playbook_scores
 - id, playbook_name, category, success_count, fail_count, last_updated
