@@ -42,6 +42,25 @@ const SEVERITY_COLORS = {
     5: '#dc2626', // dark red - severe
 }
 
+const clampSeverity = (value?: number | null) => {
+    const numeric = typeof value === 'number' ? value : Number(value)
+    const safe = Number.isFinite(numeric) ? Math.round(numeric) : 3
+    return Math.min(5, Math.max(1, safe))
+}
+
+const getSeverityColor = (value?: number | null) =>
+    SEVERITY_COLORS[clampSeverity(value) as keyof typeof SEVERITY_COLORS]
+
+const darkenColor = (hex: string, amount = 30) => {
+    const clamp = (value: number) => Math.max(0, Math.min(255, value))
+    const normalized = hex.replace('#', '')
+    if (normalized.length !== 6) return hex
+    const r = clamp(parseInt(normalized.slice(0, 2), 16) - amount)
+    const g = clamp(parseInt(normalized.slice(2, 4), 16) - amount)
+    const b = clamp(parseInt(normalized.slice(4, 6), 16) - amount)
+    return `#${[r, g, b].map((value) => value.toString(16).padStart(2, '0')).join('')}`
+}
+
 // Camera presets for each view mode
 const VIEWS = {
     global: {
@@ -246,7 +265,8 @@ export default function OperationsHub() {
         if (!map3d) return
 
         try {
-            const { Polygon3DElement, Marker3DInteractiveElement } = await (window as any).google.maps.importLibrary('maps3d')
+            const { Polygon3DElement, Marker3DElement } = await (window as any).google.maps.importLibrary('maps3d')
+            const { PinElement } = await (window as any).google.maps.importLibrary('marker')
 
             // Clear existing overlays
             markersRef.current.forEach(marker => marker.remove?.())
@@ -267,8 +287,7 @@ export default function OperationsHub() {
                 const circlePath = createCircleCoordinates(coords.lat, coords.lng, radius)
 
                 // Determine zone color based on severity
-                const severity = Math.min(Math.max(Math.round(cluster.severity_score || 3), 1), 5)
-                const color = SEVERITY_COLORS[severity as keyof typeof SEVERITY_COLORS]
+                const color = getSeverityColor(cluster.severity_score)
 
                 // Convert hex color to rgba with opacity for Polygon3DElement
                 const hexToRgba = (hex: string, alpha: number) => {
@@ -307,23 +326,27 @@ export default function OperationsHub() {
                 const coords = await geocodeLocation(complaint.location_label, tilesApiKey)
                 if (!coords) continue
 
-                const severity = Math.min(Math.max(complaint.severity_pred || 3, 1), 5)
-                const color = SEVERITY_COLORS[severity as keyof typeof SEVERITY_COLORS]
+                const color = getSeverityColor(complaint.severity_pred)
 
-                const marker = new Marker3DInteractiveElement({
+                const marker = new Marker3DElement({
                     position: { lat: coords.lat, lng: coords.lng, altitude: 0 },
                     altitudeMode: 'CLAMP_TO_GROUND',
                     extruded: true,
                 })
 
-                // Style the marker with severity color
-                marker.style.setProperty('--gmp-3d-marker-color', color)
-                marker.style.setProperty('--gmp-3d-marker-scale', '0.7')
+                // Style the marker with severity color via PinElement (supported customization)
+                const pin = new PinElement({
+                    background: color,
+                    borderColor: darkenColor(color, 25),
+                    glyphColor: '#ffffff',
+                    scale: 1.0,
+                })
+                marker.appendChild(pin.element ?? pin)
 
                 // Add hover events for complaint markers
                 marker.addEventListener('gmp-mouseenter', () => {
                     setHoveredItem({ type: 'complaint', data: complaint })
-                    marker.style.setProperty('--gmp-3d-marker-scale', '1.0') // Enlarge on hover
+                    marker.style.setProperty('--gmp-3d-marker-scale', '1.0') // Enlarge on hover (if supported)
                 })
 
                 marker.addEventListener('gmp-mouseleave', () => {
