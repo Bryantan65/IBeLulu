@@ -8,6 +8,7 @@ const RUNSHEET_PLANNER_AGENT_ID = '3526a9b1-95e0-48f4-ba44-8cfdc5cb3de7'
 const DISPATCH_AGENT_ID = 'ffa00917-c317-4950-9b8f-1bc8bfe98549'
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
+const DISPATCH_TELEGRAM_USER_ID = import.meta.env.VITE_DISPATCH_TELEGRAM_USER_ID || '836447627'
 
 interface Cluster {
     id: string
@@ -243,6 +244,36 @@ Provide dispatch confirmation and field instructions.`
                     })
                 }
             )
+
+            // Log dispatch for telegram bot to notify the assigned user
+            const auditResponse = await fetch(`${SUPABASE_URL}/rest/v1/audit_log`, {
+                method: 'POST',
+                headers: {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    entity_type: 'run_sheet',
+                    entity_id: sheet.id,
+                    agent_name: 'DispatchUI',
+                    action: 'DISPATCHED',
+                    inputs_summary: {
+                        telegram_user_id: DISPATCH_TELEGRAM_USER_ID,
+                        run_sheet_id: sheet.id,
+                        team_name: teamName,
+                        date: sheet.date,
+                        time_window: sheet.time_window,
+                        tasks: sheet.run_sheet_tasks?.length || 0,
+                        zones: sheet.zones_covered?.join(', ') || 'N/A',
+                        capacity_used_percent: sheet.capacity_used_percent,
+                    },
+                }),
+            })
+            if (!auditResponse.ok) {
+                const errorText = await auditResponse.text()
+                console.error('Failed to log dispatch to audit_log:', auditResponse.status, errorText)
+            }
 
             // Refresh data
             await fetchData()

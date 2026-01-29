@@ -2,7 +2,9 @@ import json
 import os
 import time
 import urllib.request
-from typing import Dict, List, Optional
+import urllib.parse
+from typing import Dict, List, Optional, Set
+from datetime import datetime, timezone
 
 
 def load_env_file(path: str) -> None:
@@ -26,6 +28,8 @@ load_env_file(os.path.join(BASE_DIR, '.env.local'))
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '').strip()
 SUPABASE_URL = os.environ.get('SUPABASE_URL', '').strip()
 SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY', '').strip()
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '').strip()
+SUPABASE_API_KEY = (SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY).strip()
 
 WXO_HOST_URL = os.environ.get('WXO_HOST_URL', 'https://api.ap-southeast-1.dl.watson-orchestrate.ibm.com').strip()
 WXO_INSTANCE_ID = os.environ.get('WXO_INSTANCE_ID', '20260126-1332-1571-30ef-acf1a3847d97').strip()
@@ -33,6 +37,9 @@ WXO_AGENT_ID = os.environ.get('WXO_AGENT_ID', 'addd6d7a-97ab-44db-8774-30fb15f7a
 
 POLL_TIMEOUT = int(os.environ.get('TELEGRAM_POLL_TIMEOUT', '50'))
 MAX_HISTORY = int(os.environ.get('WXO_MAX_HISTORY', '12'))
+DISPATCH_POLL_INTERVAL = int(os.environ.get('DISPATCH_POLL_INTERVAL', '15'))
+DISPATCH_TELEGRAM_USER_ID = os.environ.get('DISPATCH_TELEGRAM_USER_ID', '297484629').strip()
+DISPATCH_LOOKBACK_SECONDS = int(os.environ.get('DISPATCH_LOOKBACK_SECONDS', '3600'))
 
 TOKEN_ENDPOINT = f"{SUPABASE_URL}/functions/v1/watson-token" if SUPABASE_URL else ''
 
@@ -40,6 +47,9 @@ cached_token: Optional[str] = None
 token_expiry: Optional[int] = None
 
 history_by_user: Dict[int, List[Dict[str, str]]] = {}
+last_dispatch_check: int = int(time.time()) - DISPATCH_LOOKBACK_SECONDS
+last_dispatch_poll: float = 0.0
+sent_dispatch_ids: Set[str] = set()
 
 
 def log(msg: str) -> None:
@@ -66,15 +76,15 @@ def get_valid_token() -> str:
     if cached_token and token_expiry and int(time.time()) < (token_expiry - 300):
         return cached_token
 
-    if not TOKEN_ENDPOINT or not SUPABASE_ANON_KEY:
-        raise RuntimeError('Missing SUPABASE_URL or SUPABASE_ANON_KEY env vars.')
+    if not TOKEN_ENDPOINT or not SUPABASE_API_KEY:
+        raise RuntimeError('Missing SUPABASE_URL or SUPABASE_API_KEY env vars.')
 
     log('Fetching IBM token via Supabase Edge Function...')
     data = http_request(
         TOKEN_ENDPOINT,
         method='POST',
         headers={
-            'Authorization': f'Bearer {SUPABASE_ANON_KEY}',
+            'Authorization': f'Bearer {SUPABASE_API_KEY}',
             'Content-Type': 'application/json',
             'Accept': 'application/json',
         },
@@ -165,9 +175,227 @@ def send_telegram_message(chat_id: int, text: str, parse_mode: str = 'Markdown')
         )
 
 
+def _safe_parse_summary(value: Optional[dict]) -> dict:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            return {}
+    return {}
+
+
+def build_dispatch_message(payload: dict, run_sheet_id: str) -> str:
+    team = payload.get('team_name') or 'Field Team'
+    date = payload.get('date') or 'Upcoming'
+    time_window = payload.get('time_window') or 'N/A'
+    tasks = payload.get('tasks') or payload.get('tasks_count') or 'N/A'
+    zones = payload.get('zones') or payload.get('zones_covered') or 'N/A'
+    capacity = payload.get('capacity_used_percent')
+    task_summary = payload.get('task') or payload.get('task_summary') or 'N/A'
+    notes = payload.get('notes') or 'N/A'
+    capacity_text = f"{capacity}%" if capacity is not None else 'N/A'
+
+    return (
+        "🚨 *Dispatch Update*\n\n"
+        f"Team: *{team}*\n"
+        f"Run Sheet: `{run_sheet_id[:8]}`\n"
+        f"Date: {date}\n"
+        f"Window: {time_window}\n"
+        f"Tasks: {tasks}\n"
+        f"Zones: {zones}\n"
+        f"Issue: {task_summary}\n"
+        f"Notes: {notes}\n"
+        f"Capacity used: {capacity_text}\n\n"
+        "Please acknowledge and proceed."
+    )
+
+
+def _fetch_json(url: str) -> list:
+    return http_request(
+        url,
+        method='GET',
+        headers={
+            'apikey': SUPABASE_API_KEY,
+            'Authorization': f'Bearer {SUPABASE_API_KEY}',
+        },
+    )
+
+
+def fetch_run_sheet_task_summary(run_sheet_id: str) -> str:
+    if not SUPABASE_URL or not SUPABASE_API_KEY:
+        return ''
+
+    tasks_url = (
+        f"{SUPABASE_URL}/rest/v1/run_sheet_tasks?"
+        f"select=task_id&run_sheet_id=eq.{run_sheet_id}"
+    )
+    try:
+        task_links = _fetch_json(tasks_url)
+    except Exception as exc:
+        log(f'Error fetching run_sheet_tasks: {exc}')
+        return ''
+
+    if not isinstance(task_links, list) or not task_links:
+        return ''
+
+    task_ids = [row.get('task_id') for row in task_links if row.get('task_id')]
+    if not task_ids:
+        return ''
+
+    task_ids_csv = ','.join(task_ids)
+    task_ids_filter = urllib.parse.quote(task_ids_csv, safe=',')
+    task_details_url = (
+        f"{SUPABASE_URL}/rest/v1/tasks?"
+        f"select=id,cluster_id,task_type&id=in.({task_ids_filter})"
+    )
+
+    try:
+        tasks = _fetch_json(task_details_url)
+    except Exception as exc:
+        log(f'Error fetching tasks: {exc}')
+        return ''
+
+    cluster_ids = list({row.get('cluster_id') for row in tasks if row.get('cluster_id')})
+    cluster_map: dict = {}
+    if cluster_ids:
+        cluster_ids_csv = ','.join(cluster_ids)
+        cluster_ids_filter = urllib.parse.quote(cluster_ids_csv, safe=',')
+        cluster_url = (
+            f"{SUPABASE_URL}/rest/v1/clusters?"
+            f"select=id,description,location_label,zone_id,category&id=in.({cluster_ids_filter})"
+        )
+        try:
+            clusters = _fetch_json(cluster_url)
+            if isinstance(clusters, list):
+                cluster_map = {row.get('id'): row for row in clusters if row.get('id')}
+        except Exception as exc:
+            log(f'Error fetching clusters: {exc}')
+
+    lines: list[str] = []
+    for task in tasks:
+        cluster = cluster_map.get(task.get('cluster_id'), {})
+        desc = cluster.get('description') or cluster.get('location_label') or cluster.get('zone_id') or 'Unspecified issue'
+        category = cluster.get('category') or 'issue'
+        task_type = task.get('task_type') or 'task'
+        lines.append(f"{category}: {desc} ({task_type})")
+
+    # Deduplicate while preserving order
+    seen = set()
+    cleaned = []
+    for line in lines:
+        if line in seen:
+            continue
+        seen.add(line)
+        cleaned.append(line)
+
+    return ' | '.join(cleaned)
+
+
+def poll_dispatch_notifications() -> None:
+    global last_dispatch_check
+    if not SUPABASE_URL or not SUPABASE_API_KEY:
+        return
+
+    since_iso = datetime.fromtimestamp(last_dispatch_check, tz=timezone.utc).isoformat()
+    encoded_since = urllib.parse.quote(since_iso, safe='')
+    url = (
+        f"{SUPABASE_URL}/rest/v1/run_sheets?"
+        f"select=id,date,time_window,zones_covered,capacity_used_percent,dispatched_at,task,notes,teams(name)"
+        f"&status=eq.dispatched"
+        f"&dispatched_at=gt.{encoded_since}"
+        f"&order=dispatched_at.asc"
+        f"&limit=10"
+    )
+
+    try:
+        response = http_request(
+            url,
+            method='GET',
+            headers={
+                'apikey': SUPABASE_API_KEY,
+                'Authorization': f'Bearer {SUPABASE_API_KEY}',
+            },
+        )
+    except Exception as exc:
+        log(f'Error polling dispatch notifications: {exc}')
+        log(f'Polling URL: {url}')
+        return
+
+    if not isinstance(response, list) or not response:
+        return
+
+    for entry in response:
+        run_sheet_id = entry.get('id')
+        if not run_sheet_id:
+            continue
+
+        dispatch_id = f"runsheet-{run_sheet_id}"
+        if dispatch_id in sent_dispatch_ids:
+            continue
+
+        team = entry.get('teams') or {}
+        team_name = team.get('name') if isinstance(team, dict) else None
+        zones = entry.get('zones_covered') or []
+        zones_text = ', '.join(zones) if isinstance(zones, list) and zones else 'N/A'
+        task_summary = entry.get('task') or ''
+        notes = entry.get('notes') or 'N/A'
+
+        if not task_summary:
+            task_summary = fetch_run_sheet_task_summary(str(run_sheet_id))
+            if task_summary:
+                try:
+                    http_request(
+                        f"{SUPABASE_URL}/rest/v1/run_sheets?id=eq.{run_sheet_id}",
+                        method='PATCH',
+                        headers={
+                            'apikey': SUPABASE_API_KEY,
+                            'Authorization': f'Bearer {SUPABASE_API_KEY}',
+                            'Content-Type': 'application/json',
+                        },
+                        body={'task': task_summary},
+                    )
+                except Exception as exc:
+                    log(f'Error updating run_sheets.task: {exc}')
+
+        payload = {
+            'team_name': team_name or 'Field Team',
+            'date': entry.get('date'),
+            'time_window': entry.get('time_window'),
+            'tasks': 'N/A',
+            'zones': zones_text,
+            'capacity_used_percent': entry.get('capacity_used_percent'),
+            'task': task_summary or 'N/A',
+            'notes': notes,
+        }
+
+        try:
+            chat_id = int(DISPATCH_TELEGRAM_USER_ID)
+        except Exception:
+            chat_id = 0
+
+        if chat_id:
+            message = build_dispatch_message(payload, str(run_sheet_id))
+            send_telegram_message(chat_id, message)
+
+        sent_dispatch_ids.add(dispatch_id)
+        ts = entry.get('dispatched_at')
+        if ts:
+            try:
+                last_dispatch_check = max(
+                    last_dispatch_check,
+                    int(datetime.fromisoformat(ts.replace('Z', '+00:00')).timestamp()),
+                )
+            except Exception:
+                last_dispatch_check = int(time.time())
+
+
 def save_complaint_to_supabase(text: str, telegram_user_id: int, telegram_username: Optional[str]) -> Optional[str]:
     """Save a complaint to the Supabase complaints table and return the complaint ID."""
-    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+    if not SUPABASE_URL or not SUPABASE_API_KEY:
         log('Cannot save complaint: Missing Supabase configuration')
         return None
 
@@ -185,8 +413,8 @@ def save_complaint_to_supabase(text: str, telegram_user_id: int, telegram_userna
             url,
             method='POST',
             headers={
-                'apikey': SUPABASE_ANON_KEY,
-                'Authorization': f'Bearer {SUPABASE_ANON_KEY}',
+                'apikey': SUPABASE_API_KEY,
+                'Authorization': f'Bearer {SUPABASE_API_KEY}',
                 'Content-Type': 'application/json',
                 'Prefer': 'return=representation',
             },
@@ -213,7 +441,7 @@ def save_complaint_to_supabase(text: str, telegram_user_id: int, telegram_userna
 
 def cluster_complaint(complaint_id: str) -> None:
     """Trigger clustering for a newly created complaint."""
-    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+    if not SUPABASE_URL or not SUPABASE_API_KEY:
         log('Cannot cluster complaint: Missing Supabase configuration')
         return
 
@@ -223,7 +451,7 @@ def cluster_complaint(complaint_id: str) -> None:
             url,
             method='POST',
             headers={
-                'Authorization': f'Bearer {SUPABASE_ANON_KEY}',
+                'Authorization': f'Bearer {SUPABASE_API_KEY}',
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
             },
@@ -236,7 +464,7 @@ def cluster_complaint(complaint_id: str) -> None:
 
 def check_complaint_status(complaint_id: str) -> str:
     """Check the status of a complaint by ID."""
-    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+    if not SUPABASE_URL or not SUPABASE_API_KEY:
         return '❌ Database not configured.'
 
     try:
@@ -245,8 +473,8 @@ def check_complaint_status(complaint_id: str) -> str:
             url,
             method='GET',
             headers={
-                'apikey': SUPABASE_ANON_KEY,
-                'Authorization': f'Bearer {SUPABASE_ANON_KEY}',
+                'apikey': SUPABASE_API_KEY,
+                'Authorization': f'Bearer {SUPABASE_API_KEY}',
             },
         )
 
@@ -274,7 +502,7 @@ def check_complaint_status(complaint_id: str) -> str:
 
 def get_user_complaints(telegram_user_id: str) -> str:
     """Get the recent complaints for a user."""
-    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+    if not SUPABASE_URL or not SUPABASE_API_KEY:
         return '❌ Database not configured.'
 
     try:
@@ -283,8 +511,8 @@ def get_user_complaints(telegram_user_id: str) -> str:
             url,
             method='GET',
             headers={
-                'apikey': SUPABASE_ANON_KEY,
-                'Authorization': f'Bearer {SUPABASE_ANON_KEY}',
+                'apikey': SUPABASE_API_KEY,
+                'Authorization': f'Bearer {SUPABASE_API_KEY}',
             },
         )
 
@@ -305,7 +533,7 @@ def get_user_complaints(telegram_user_id: str) -> str:
 
 def queue_failed_message(telegram_user_id: str, chat_id: str, message_text: str, error_message: str) -> None:
     """Queue a failed message for later retry."""
-    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+    if not SUPABASE_URL or not SUPABASE_API_KEY:
         log('Cannot queue failed message: Missing Supabase configuration')
         return
 
@@ -323,8 +551,8 @@ def queue_failed_message(telegram_user_id: str, chat_id: str, message_text: str,
             url,
             method='POST',
             headers={
-                'apikey': SUPABASE_ANON_KEY,
-                'Authorization': f'Bearer {SUPABASE_ANON_KEY}',
+                'apikey': SUPABASE_API_KEY,
+                'Authorization': f'Bearer {SUPABASE_API_KEY}',
                 'Content-Type': 'application/json',
             },
             body=failed_data,
@@ -377,6 +605,16 @@ def handle_update(update: dict) -> None:
             "Urgent? Call 6123-4567"
         )
         send_telegram_message(chat_id, help_msg)
+        return
+
+    # Handle /register command
+    if text.strip().lower() == '/register':
+        register_msg = (
+            "✅ *Registration Complete*\n\n"
+            f"Your chat_id is: `{chat_id}`\n\n"
+            "Share this ID with the dispatcher if needed."
+        )
+        send_telegram_message(chat_id, register_msg)
         return
 
     # Handle /status command
@@ -451,11 +689,12 @@ def handle_update(update: dict) -> None:
 
 
 def main() -> None:
+    global last_dispatch_poll
     if not TELEGRAM_BOT_TOKEN:
         raise RuntimeError('Missing TELEGRAM_BOT_TOKEN in .env.local or environment.')
 
-    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
-        raise RuntimeError('Missing SUPABASE_URL or SUPABASE_ANON_KEY in environment.')
+    if not SUPABASE_URL or not SUPABASE_API_KEY:
+        raise RuntimeError('Missing SUPABASE_URL or SUPABASE_API_KEY in environment.')
 
     log('Starting Telegram bot long-polling...')
     offset = 0
@@ -471,6 +710,9 @@ def main() -> None:
                 update_id = update.get('update_id', 0)
                 offset = max(offset, update_id + 1)
                 handle_update(update)
+            if time.time() - last_dispatch_poll > DISPATCH_POLL_INTERVAL:
+                poll_dispatch_notifications()
+                last_dispatch_poll = time.time()
         except Exception as exc:
             log(f'Polling error: {exc}')
             time.sleep(2)
