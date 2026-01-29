@@ -20,24 +20,71 @@ type ActivityEntry = {
     text: string
     time: string
     type: string
+    timestamp: number
 }
 
-type AgentDecision = {
+type InsightItem = {
     agent: string
     action: string
     confidence: number | null
     detail: string
 }
 
-type AuditLogRow = {
+type ForecastRow = {
+    zone_id: string | null
+    risk_score: number | null
+    predicted_category: string | null
+}
+
+type ForecastSignalRow = {
+    weather_rain_prob: number | null
+    event_type: string | null
+}
+
+type ComplaintRow = {
     id: string
-    agent_name: string | null
-    action: string | null
-    entity_type: string | null
-    inputs_summary: Record<string, unknown> | null
-    outputs_summary: Record<string, unknown> | null
-    confidence: number | null
-    timestamp: string | null
+    created_at: string | null
+    text: string | null
+    location_label: string | null
+    category_pred: string | null
+    severity_pred: number | null
+    status: string | null
+}
+
+type ClusterRow = {
+    id: string
+    created_at: string | null
+    category: string | null
+    location_label: string | null
+    zone_id: string | null
+    severity_score: number | null
+    complaint_count: number | null
+    state: string | null
+    description: string | null
+    requires_human_review?: boolean | null
+}
+
+type TaskRow = {
+    id: string
+    created_at: string | null
+    task_type: string | null
+    assigned_team: string | null
+    status: string | null
+}
+
+type EvidenceRow = {
+    id: string
+    submitted_at: string | null
+    notes: string | null
+    task_id: string | null
+}
+
+type PlaybookScoreRow = {
+    id: string
+    playbook_name: string
+    category: string | null
+    success_count: number | null
+    fail_count: number | null
 }
 
 const EMPTY_METRICS: MetricSnapshot = {
@@ -67,41 +114,26 @@ function formatRelativeTime(timestamp?: string | null) {
     return `${diffDays}d ago`
 }
 
-function extractSummary(payload?: Record<string, unknown> | null) {
-    if (!payload) return null
-    const preferredKeys = ['summary', 'decision', 'playbook', 'playbook_name', 'reason', 'result', 'recommendation', 'note']
-    for (const key of preferredKeys) {
-        const value = payload[key]
-        if (typeof value === 'string' && value.trim()) return value
-    }
-    for (const value of Object.values(payload)) {
-        if (typeof value === 'string' && value.trim()) return value
-    }
-    return null
+function compact(text?: string | null, max = 80) {
+    if (!text) return 'Update logged'
+    const trimmed = text.trim()
+    if (trimmed.length <= max) return trimmed
+    return `${trimmed.slice(0, max)}...`
 }
 
-function buildActivityText(entry: AuditLogRow) {
-    const summary = extractSummary(entry.outputs_summary) || extractSummary(entry.inputs_summary)
-    if (summary) return summary
-    const entity = entry.entity_type ? entry.entity_type.replace(/_/g, ' ') : 'Entity'
-    const action = entry.action ? entry.action.replace(/_/g, ' ') : 'updated'
-    return `${entity} ${action}`
+function toTimestamp(value?: string | null) {
+    return value ? new Date(value).getTime() : 0
 }
 
-function mapActivityType(entry: AuditLogRow) {
-    const action = (entry.action || '').toLowerCase()
-    const entity = (entry.entity_type || '').toLowerCase()
-    if (action.includes('dispatch') || action.includes('assign')) return 'dispatch'
-    if (action.includes('triage') || entity.includes('complaint')) return 'triage'
-    if (action.includes('verify') || action.includes('complete')) return 'verify'
-    if (action.includes('forecast') || entity.includes('forecast')) return 'forecast'
-    return 'system'
+function formatZone(zone?: string | null) {
+    if (!zone) return 'Unknown area'
+    return zone
 }
 
 export default function Dashboard() {
     const [metrics, setMetrics] = useState<MetricSnapshot>(EMPTY_METRICS)
     const [activities, setActivities] = useState<ActivityEntry[]>([])
-    const [agentDecisions, setAgentDecisions] = useState<AgentDecision[]>([])
+    const [insights, setInsights] = useState<InsightItem[]>([])
 
     const supabaseHeaders = useMemo(() => ({
         apikey: SUPABASE_ANON_KEY,
@@ -124,22 +156,28 @@ export default function Dashboard() {
             tomorrow.setDate(tomorrow.getDate() + 1)
             const tomorrowStr = formatDateLocal(tomorrow)
 
-            const [clusters, teams, tasks, auditLogs, forecasts, forecastSignals] = await Promise.all([
-                fetchJson<Array<{ id: string; state: string | null; requires_human_review: boolean | null; created_at: string | null }>>(
-                    'clusters?state=not.in.(CLOSED,RESOLVED)&select=id,state,requires_human_review,created_at'
+            const [clusters, teams, tasks, forecasts, forecastSignals, complaints, evidence, playbookScores] = await Promise.all([
+                fetchJson<ClusterRow[]>(
+                    'clusters?state=not.in.(CLOSED,RESOLVED)&select=id,state,requires_human_review,created_at,category,location_label,zone_id,severity_score,complaint_count,description'
                 ),
                 fetchJson<Array<{ id: string }>>('teams?is_active=eq.true&select=id'),
-                fetchJson<Array<{ id: string; assigned_team: string | null; status: string | null }>>(
-                    'tasks?status=in.(PLANNED,IN_PROGRESS,DISPATCHED)&select=id,assigned_team,status'
+                fetchJson<TaskRow[]>(
+                    'tasks?status=in.(PLANNED,IN_PROGRESS,DISPATCHED)&select=id,assigned_team,status,created_at,task_type'
                 ),
-                fetchJson<AuditLogRow[]>(
-                    'audit_log?order=timestamp.desc&limit=8&select=id,agent_name,action,entity_type,inputs_summary,outputs_summary,confidence,timestamp'
+                fetchJson<ForecastRow[]>(
+                    `forecasts?date=eq.${tomorrowStr}&order=risk_score.desc&limit=10&select=zone_id,risk_score,predicted_category`
                 ),
-                fetchJson<Array<{ risk_score: number | null; predicted_category: string | null; reason: string | null }>>(
-                    `forecasts?date=eq.${tomorrowStr}&order=risk_score.desc&limit=1&select=risk_score,predicted_category,reason`
-                ),
-                fetchJson<Array<{ weather_rain_prob: number | null; event_type: string | null }>>(
+                fetchJson<ForecastSignalRow[]>(
                     `forecast_signals?date=eq.${tomorrowStr}&order=weather_rain_prob.desc&limit=1&select=weather_rain_prob,event_type`
+                ),
+                fetchJson<ComplaintRow[]>(
+                    'complaints?order=created_at.desc&limit=6&select=id,created_at,text,location_label,category_pred,severity_pred,status'
+                ),
+                fetchJson<EvidenceRow[]>(
+                    'evidence?order=submitted_at.desc&limit=6&select=id,submitted_at,notes,task_id'
+                ),
+                fetchJson<PlaybookScoreRow[]>(
+                    'playbook_scores?order=success_count.desc&limit=6&select=id,playbook_name,category,success_count,fail_count'
                 ),
             ])
 
@@ -158,17 +196,22 @@ export default function Dashboard() {
             let forecastRisk = '-'
             let forecastDetail: string | undefined
 
-            const forecast = forecasts?.[0]
-            const signal = forecastSignals?.[0]
-
-            if (forecast) {
-                const riskScore = Number(forecast.risk_score ?? 0)
-                forecastRisk = riskScore >= 0.8 ? 'High' : riskScore >= 0.5 ? 'Medium' : 'Low'
-                forecastDetail = forecast.reason || (forecast.predicted_category ? `Category: ${forecast.predicted_category}` : undefined)
-            } else if (signal) {
-                const rainProb = Number(signal.weather_rain_prob ?? 0)
-                forecastRisk = rainProb >= 0.7 ? 'High' : rainProb >= 0.4 ? 'Medium' : 'Low'
-                forecastDetail = Number.isFinite(rainProb) ? `Rain ${Math.round(rainProb * 100)}%` : signal.event_type || undefined
+            const riskRows = forecasts ?? []
+            if (riskRows.length > 0) {
+                const highRisk = riskRows.filter((row) => Number(row.risk_score ?? 0) >= 0.7)
+                const top = riskRows[0]
+                forecastRisk = highRisk.length > 0 ? `${highRisk.length} zones` : 'Low'
+                if (top?.zone_id) {
+                    const score = Math.round((Number(top.risk_score ?? 0) || 0) * 100)
+                    forecastDetail = `Top: ${formatZone(top.zone_id)} (${score}%)`
+                }
+            } else {
+                const signal = forecastSignals?.[0]
+                if (signal) {
+                    const rainProb = Number(signal.weather_rain_prob ?? 0)
+                    forecastRisk = rainProb >= 0.7 ? 'High' : rainProb >= 0.4 ? 'Medium' : 'Low'
+                    forecastDetail = Number.isFinite(rainProb) ? `Rain ${Math.round(rainProb * 100)}%` : signal.event_type || undefined
+                }
             }
 
             setMetrics({
@@ -179,30 +222,81 @@ export default function Dashboard() {
                 forecastDetail,
             })
 
-            const logs = auditLogs ?? []
-            const activityEntries = logs.slice(0, 4).map((entry) => ({
-                id: entry.id,
-                text: buildActivityText(entry),
-                time: formatRelativeTime(entry.timestamp),
-                type: mapActivityType(entry),
-            }))
-            setActivities(activityEntries)
+            const activityItems: ActivityEntry[] = []
 
-            const agentEntries = logs
-                .filter((entry) => entry.agent_name)
-                .slice(0, 3)
-                .map((entry) => ({
-                    agent: entry.agent_name || 'Agent',
-                    action: entry.action ? entry.action.toUpperCase() : 'ACTION',
-                    confidence: entry.confidence ?? null,
-                    detail: extractSummary(entry.outputs_summary) || extractSummary(entry.inputs_summary) || `${entry.entity_type ?? 'Entity'} update`,
-                }))
-            setAgentDecisions(agentEntries)
+            for (const complaint of complaints ?? []) {
+                const timestamp = toTimestamp(complaint.created_at)
+                activityItems.push({
+                    id: `complaint-${complaint.id}`,
+                    text: `Complaint: ${compact(complaint.text)} @ ${formatZone(complaint.location_label)}`,
+                    time: formatRelativeTime(complaint.created_at),
+                    type: 'triage',
+                    timestamp,
+                })
+            }
+
+            for (const cluster of clusters ?? []) {
+                const timestamp = toTimestamp(cluster.created_at)
+                activityItems.push({
+                    id: `cluster-${cluster.id}`,
+                    text: `Cluster ${cluster.category ?? 'issue'} (${cluster.complaint_count ?? 0}) - ${compact(cluster.description || cluster.location_label || cluster.zone_id)}`,
+                    time: formatRelativeTime(cluster.created_at),
+                    type: 'dispatch',
+                    timestamp,
+                })
+            }
+
+            for (const task of tasks ?? []) {
+                const timestamp = toTimestamp(task.created_at)
+                activityItems.push({
+                    id: `task-${task.id}`,
+                    text: `Task ${task.task_type ?? 'work order'} ${task.status ? `(${task.status})` : ''}`,
+                    time: formatRelativeTime(task.created_at),
+                    type: task.status && task.status.toLowerCase().includes('complete') ? 'verify' : 'dispatch',
+                    timestamp,
+                })
+            }
+
+            for (const proof of evidence ?? []) {
+                const timestamp = toTimestamp(proof.submitted_at)
+                activityItems.push({
+                    id: `evidence-${proof.id}`,
+                    text: `Evidence uploaded${proof.task_id ? ` for task ${proof.task_id.slice(0, 6)}` : ''}: ${compact(proof.notes, 60)}`,
+                    time: formatRelativeTime(proof.submitted_at),
+                    type: 'verify',
+                    timestamp,
+                })
+            }
+
+            activityItems.sort((a, b) => b.timestamp - a.timestamp)
+            setActivities(activityItems.slice(0, 4))
+
+            const scoreRows = playbookScores ?? []
+            const insightItems = scoreRows.slice(0, 3).map((row) => {
+                const success = Number(row.success_count ?? 0)
+                const fail = Number(row.fail_count ?? 0)
+                const total = success + fail
+                const rate = total > 0 ? success / total : 0
+                return {
+                    agent: row.playbook_name,
+                    action: row.category ? row.category.toUpperCase() : 'PLAYBOOK',
+                    confidence: rate,
+                    detail: `${success} success · ${fail} fail`,
+                }
+            })
+            setInsights(insightItems)
         }
 
         loadDashboardData().catch((error) => {
             console.error('Failed to load dashboard data:', error)
         })
+        const interval = window.setInterval(() => {
+            loadDashboardData().catch((error) => {
+                console.error('Failed to refresh dashboard data:', error)
+            })
+        }, 60000)
+
+        return () => window.clearInterval(interval)
     }, [supabaseHeaders, SUPABASE_URL, SUPABASE_ANON_KEY])
 
     return (
@@ -230,7 +324,7 @@ export default function Dashboard() {
                     icon={<Users size={18} />}
                 />
                 <MetricCard
-                    label="Tomorrow Risk"
+                    label="At-Risk Zones"
                     value={metrics.forecastRisk}
                     trend={metrics.forecastDetail ? 'up' : undefined}
                     trendValue={metrics.forecastDetail}
@@ -261,16 +355,16 @@ export default function Dashboard() {
                 </div>
 
                 <div className="dashboard__feed">
-                    <h3>Agent Decisions</h3>
+                    <h3>Playbook Performance</h3>
                     <div className="dashboard__feed-list">
-                        {agentDecisions.length === 0 ? (
+                        {insights.length === 0 ? (
                             <div className="agent-item">
                                 <div className="agent-item__header">
-                                    <span className="agent-item__name">No agent decisions yet</span>
+                                    <span className="agent-item__name">No playbook stats yet</span>
                                 </div>
                             </div>
                         ) : (
-                            agentDecisions.map((decision, index) => (
+                            insights.map((decision, index) => (
                                 <AgentItem
                                     key={`${decision.agent}-${index}`}
                                     agent={decision.agent}

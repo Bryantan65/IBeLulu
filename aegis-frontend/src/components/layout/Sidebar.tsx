@@ -7,7 +7,6 @@ import {
     Calendar,
     Camera,
     CloudSun,
-    FlaskConical,
     BarChart3,
     ChevronLeft,
     Shield,
@@ -49,7 +48,6 @@ const navGroups: { title: string; items: NavItem[] }[] = [
         title: 'Intelligence',
         items: [
             { label: 'Tomorrow Plan', icon: <CloudSun size={20} />, href: '/forecast' },
-            { label: 'What-If', icon: <FlaskConical size={20} />, href: '/simulator' },
         ],
     },
     {

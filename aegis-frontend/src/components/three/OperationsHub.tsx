@@ -201,32 +201,49 @@ export default function OperationsHub() {
     const map3dRef = useRef<any>(null)
     const markersRef = useRef<any[]>([])
     const polygonsRef = useRef<any[]>([])
+    const lastPointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
 
     const [clustersData, setClustersData] = useState<ClusterData[]>([])
     const [complaintsData, setComplaintsData] = useState<ComplaintData[]>([])
-    const [hoveredItem, setHoveredItem] = useState<{ type: 'cluster' | 'complaint'; data: ClusterData | ComplaintData } | null>(null)
+    const [selectedItem, setSelectedItem] = useState<{ type: 'cluster' | 'complaint'; data: ClusterData | ComplaintData } | null>(null)
     const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
 
     const { viewMode, isTransitioning, setViewMode, setIsTransitioning, setSceneReady } = useOperationsStore()
     const tilesApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string
 
+    const updateTooltipPosition = useCallback((clientX: number, clientY: number) => {
+        if (!containerRef.current) return
+        const rect = containerRef.current.getBoundingClientRect()
+        setTooltipPosition({
+            x: clientX - rect.left,
+            y: clientY - rect.top,
+        })
+    }, [])
+
+    const toggleSelection = useCallback(
+        (type: 'cluster' | 'complaint', data: ClusterData | ComplaintData) => {
+            const next = { type, data }
+            setSelectedItem((current) => {
+                if (current?.type === type && current.data.id === data.id) return null
+                return next
+            })
+            updateTooltipPosition(lastPointerRef.current.x, lastPointerRef.current.y)
+        },
+        [updateTooltipPosition]
+    )
+
     // ── Track mouse position for tooltip ──────────────────────────────
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
-            if (hoveredItem && containerRef.current) {
-                const rect = containerRef.current.getBoundingClientRect()
-                setTooltipPosition({
-                    x: e.clientX - rect.left,
-                    y: e.clientY - rect.top
-                })
+            lastPointerRef.current = { x: e.clientX, y: e.clientY }
+            if (selectedItem) {
+                updateTooltipPosition(e.clientX, e.clientY)
             }
         }
 
-        if (hoveredItem) {
-            window.addEventListener('mousemove', handleMouseMove)
-            return () => window.removeEventListener('mousemove', handleMouseMove)
-        }
-    }, [hoveredItem])
+        window.addEventListener('mousemove', handleMouseMove)
+        return () => window.removeEventListener('mousemove', handleMouseMove)
+    }, [selectedItem, updateTooltipPosition])
 
     // ── Fetch clusters and complaints data ────────────────────────────
     const fetchData = useCallback(async () => {
@@ -265,7 +282,7 @@ export default function OperationsHub() {
         if (!map3d) return
 
         try {
-            const { Polygon3DElement, Marker3DElement } = await (window as any).google.maps.importLibrary('maps3d')
+            const { Polygon3DInteractiveElement, Marker3DInteractiveElement } = await (window as any).google.maps.importLibrary('maps3d')
             const { PinElement } = await (window as any).google.maps.importLibrary('marker')
 
             // Clear existing overlays
@@ -297,7 +314,7 @@ export default function OperationsHub() {
                     return `rgba(${r}, ${g}, ${b}, ${alpha})`
                 }
 
-                const polygon = new Polygon3DElement({
+                const polygon = new Polygon3DInteractiveElement({
                     path: circlePath,
                     strokeColor: color,
                     strokeWidth: 3,
@@ -308,13 +325,16 @@ export default function OperationsHub() {
 
                 // Add hover events for cluster zones
                 polygon.addEventListener('gmp-mouseenter', () => {
-                    setHoveredItem({ type: 'cluster', data: cluster })
                     polygon.strokeWidth = 5 // Highlight on hover
                 })
 
                 polygon.addEventListener('gmp-mouseleave', () => {
-                    setHoveredItem(null)
                     polygon.strokeWidth = 3 // Reset
+                })
+
+                // Click to show tooltip
+                polygon.addEventListener('gmp-click', () => {
+                    toggleSelection('cluster', cluster)
                 })
 
                 map3d.append(polygon)
@@ -328,7 +348,7 @@ export default function OperationsHub() {
 
                 const color = getSeverityColor(complaint.severity_pred)
 
-                const marker = new Marker3DElement({
+                const marker = new Marker3DInteractiveElement({
                     position: { lat: coords.lat, lng: coords.lng, altitude: 0 },
                     altitudeMode: 'CLAMP_TO_GROUND',
                     extruded: true,
@@ -345,18 +365,16 @@ export default function OperationsHub() {
 
                 // Add hover events for complaint markers
                 marker.addEventListener('gmp-mouseenter', () => {
-                    setHoveredItem({ type: 'complaint', data: complaint })
                     marker.style.setProperty('--gmp-3d-marker-scale', '1.0') // Enlarge on hover (if supported)
                 })
 
                 marker.addEventListener('gmp-mouseleave', () => {
-                    setHoveredItem(null)
                     marker.style.setProperty('--gmp-3d-marker-scale', '0.7') // Reset
                 })
 
                 // Add click handler for complaint details
                 marker.addEventListener('gmp-click', () => {
-                    console.log('Complaint clicked:', complaint)
+                    toggleSelection('complaint', complaint)
                 })
 
                 map3d.append(marker)
@@ -537,8 +555,8 @@ export default function OperationsHub() {
                 isTransitioning={isTransitioning}
             />
 
-            {/* Hover Tooltip */}
-            {hoveredItem && (
+            {/* Click Tooltip */}
+            {selectedItem && (
                 <div
                     className="operations-hub__tooltip operations-hub__tooltip--dynamic"
                     style={{
@@ -547,39 +565,44 @@ export default function OperationsHub() {
                         transform: 'translate(-50%, -100%)'
                     }}
                 >
-                    {hoveredItem.type === 'cluster' ? (
+                    {selectedItem.type === 'cluster' ? (
                         <>
                             <span className="operations-hub__tooltip-type">
-                                CLUSTER · {(hoveredItem.data as ClusterData).category.toUpperCase()}
+                                CLUSTER · {(selectedItem.data as ClusterData).category.toUpperCase()}
                             </span>
                             <span className="operations-hub__tooltip-name">
-                                {(hoveredItem.data as ClusterData).location_label || (hoveredItem.data as ClusterData).zone_id}
+                                {(selectedItem.data as ClusterData).description || (selectedItem.data as ClusterData).location_label || (selectedItem.data as ClusterData).zone_id}
                             </span>
+                            {(selectedItem.data as ClusterData).description && ((selectedItem.data as ClusterData).location_label || (selectedItem.data as ClusterData).zone_id) ? (
+                                <span className="operations-hub__tooltip-text">
+                                    {(selectedItem.data as ClusterData).location_label || (selectedItem.data as ClusterData).zone_id}
+                                </span>
+                            ) : null}
                             <div className="operations-hub__tooltip-stats">
-                                <span>{(hoveredItem.data as ClusterData).complaint_count} complaints</span>
+                                <span>{(selectedItem.data as ClusterData).complaint_count} complaints</span>
                                 <span className="operations-hub__tooltip-divider">•</span>
-                                <span>Severity: {Math.round((hoveredItem.data as ClusterData).severity_score || 0)}</span>
+                                <span>Severity: {Math.round((selectedItem.data as ClusterData).severity_score || 0)}</span>
                             </div>
                             <span className="operations-hub__tooltip-state">
-                                {(hoveredItem.data as ClusterData).state}
+                                {(selectedItem.data as ClusterData).state}
                             </span>
                         </>
                     ) : (
                         <>
                             <span className="operations-hub__tooltip-type">
-                                COMPLAINT · {(hoveredItem.data as ComplaintData).category_pred?.toUpperCase() || 'UNKNOWN'}
+                                COMPLAINT · {(selectedItem.data as ComplaintData).category_pred?.toUpperCase() || 'UNKNOWN'}
                             </span>
                             <span className="operations-hub__tooltip-name">
-                                {(hoveredItem.data as ComplaintData).location_label}
+                                {(selectedItem.data as ComplaintData).location_label}
                             </span>
                             <span className="operations-hub__tooltip-text">
-                                {(hoveredItem.data as ComplaintData).text?.substring(0, 80)}
-                                {(hoveredItem.data as ComplaintData).text?.length > 80 ? '...' : ''}
+                                {(selectedItem.data as ComplaintData).text?.substring(0, 140)}
+                                {(selectedItem.data as ComplaintData).text?.length > 140 ? '...' : ''}
                             </span>
                             <div className="operations-hub__tooltip-stats">
-                                <span>Severity: {(hoveredItem.data as ComplaintData).severity_pred || 'N/A'}</span>
+                                <span>Severity: {(selectedItem.data as ComplaintData).severity_pred || 'N/A'}</span>
                                 <span className="operations-hub__tooltip-divider">•</span>
-                                <span>{(hoveredItem.data as ComplaintData).status}</span>
+                                <span>{(selectedItem.data as ComplaintData).status}</span>
                             </div>
                         </>
                     )}

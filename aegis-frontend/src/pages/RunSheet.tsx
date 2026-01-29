@@ -355,15 +355,6 @@ Provide dispatch confirmation and field instructions.`
                         <Card className="runsheet__info-banner">
                             <div className="runsheet__info-banner-content">
                                 <p><strong>{reviewedClusters.length}</strong> reviewed clusters ready for scheduling</p>
-                                <Button
-                                    size="sm"
-                                    variant="secondary"
-                                    icon={optimizing ? <Loader size={14} className="spinner" /> : <Sparkles size={14} />}
-                                    onClick={handleOptimizeRunSheets}
-                                    disabled={optimizing || reviewedClusters.length === 0}
-                                >
-                                    {optimizing ? 'Optimizing...' : 'Optimize now'}
-                                </Button>
                             </div>
                         </Card>
                     )}
@@ -403,17 +394,8 @@ Provide dispatch confirmation and field instructions.`
                         <Card className="runsheet__empty">
                             <Sparkles size={48} opacity={0.3} />
                             <h3>No draft run sheets</h3>
-                            <p>Run AI Optimize or switch to All Run Sheets to view dispatch history.</p>
+                            <p>Use AI Optimize to generate drafts, or switch to All Run Sheets to view dispatch history.</p>
                             <div className="runsheet__empty-actions">
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    icon={optimizing ? <Loader size={14} className="spinner" /> : <Sparkles size={14} />}
-                                    onClick={handleOptimizeRunSheets}
-                                    disabled={optimizing || reviewedClusters.length === 0}
-                                >
-                                    {optimizing ? 'Optimizing...' : 'Optimize now'}
-                                </Button>
                                 <Button variant="ghost" size="sm" onClick={() => handleViewChange('all')}>
                                     View all
                                 </Button>
