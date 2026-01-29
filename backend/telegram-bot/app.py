@@ -201,6 +201,29 @@ def save_complaint_to_supabase(text: str, telegram_user_id: int, telegram_userna
         return None
 
 
+def cluster_complaint(complaint_id: str) -> None:
+    """Trigger clustering for a newly created complaint."""
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        log('Cannot cluster complaint: Missing Supabase configuration')
+        return
+
+    try:
+        url = f"{SUPABASE_URL}/functions/v1/cluster-complaints"
+        http_request(
+            url,
+            method='POST',
+            headers={
+                'Authorization': f'Bearer {SUPABASE_ANON_KEY}',
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            },
+            body={'complaint_id': complaint_id},
+        )
+        log(f'Clustering triggered for complaint {complaint_id}')
+    except Exception as exc:
+        log(f'Error triggering cluster-complaints: {exc}')
+
+
 def check_complaint_status(complaint_id: str) -> str:
     """Check the status of a complaint by ID."""
     if not SUPABASE_URL or not SUPABASE_ANON_KEY:
@@ -397,6 +420,7 @@ def handle_update(update: dict) -> None:
 
             if complaint_id:
                 response_text += f"🆔 Complaint ID: `{complaint_id[:8]}`\n\n"
+                cluster_complaint(complaint_id)
 
             response_text += "📱 /status <id>\n📋 /mycomplaints\n\nThank you! 🌟"
 

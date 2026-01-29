@@ -1,12 +1,35 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Button, Badge, Card } from '../components/ui'
 import { CloudRain, Thermometer, Droplets, Plus, Loader2, Bot, Send, X, MessageSquare, User } from 'lucide-react'
 import { sendMessageToAgent, ChatMessage } from '../services/orchestrate'
+import { GoogleMap, MarkerF, InfoWindowF, useJsApiLoader } from '@react-google-maps/api'
 import './TomorrowPlan.css'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || ''
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
 const FORECAST_AGENT_ID = 'b897af4a-759f-4bf9-8163-fa66ceb97a0c' // Forecast Agent ID
+const WINDY_EMBED_URL =
+    'https://embed.windy.com/embed2.html?lat=1.3521&lon=103.8198&detailLat=1.3521&detailLon=103.8198&width=650&height=450&zoom=20&level=surface&overlay=rain&product=ecmwf&menu=&message=&marker=&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=default&metricTemp=default&radarRange=-1'
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
+
+const SINGAPORE_CENTER = { lat: 1.3521, lng: 103.8198 }
+
+const ZONE_COORDINATES: Record<string, { lat: number; lng: number; label: string }> = {
+    BEDOK_BIN_CENTRE_4: { lat: 1.3336, lng: 103.9352, label: 'Bedok' },
+    YISHUN_DRAIN_A: { lat: 1.4344, lng: 103.8366, label: 'Yishun' },
+    JURONG_EAST_FOOD_CENTRE: { lat: 1.3346, lng: 103.7429, label: 'Jurong East' },
+    TAMPINES_PARK_WALKWAY: { lat: 1.3571, lng: 103.9618, label: 'Tampines Park' },
+    BEDOK: { lat: 1.3336, lng: 103.9352, label: 'Bedok' },
+    YISHUN: { lat: 1.4344, lng: 103.8366, label: 'Yishun' },
+    JURONG_EAST: { lat: 1.3346, lng: 103.7429, label: 'Jurong East' },
+    TAMPINES: { lat: 1.3527, lng: 103.9546, label: 'Tampines' },
+    WOODLANDS: { lat: 1.4382, lng: 103.7892, label: 'Woodlands' },
+    PUNGGOL: { lat: 1.4051, lng: 103.9023, label: 'Punggol' },
+    SENGKANG: { lat: 1.3919, lng: 103.8953, label: 'Sengkang' },
+    HOUGANG: { lat: 1.3612, lng: 103.8863, label: 'Hougang' },
+    TOA_PAYOH: { lat: 1.3341, lng: 103.8563, label: 'Toa Payoh' },
+    ANG_MO_KIO: { lat: 1.3691, lng: 103.8454, label: 'Ang Mo Kio' }
+}
 
 interface Forecast {
     id: string
@@ -29,6 +52,9 @@ export default function TomorrowPlan() {
     const [forecasts, setForecasts] = useState<Forecast[]>([])
     const [loading, setLoading] = useState(true)
     const [weatherSummary, setWeatherSummary] = useState({ rainProb: 40, temp: 30, humidity: 80, desc: "Cloudy" })
+    const [mapView, setMapView] = useState<'windy' | 'google'>('windy')
+    const [googleMap, setGoogleMap] = useState<google.maps.Map | null>(null)
+    const [activeMarkerId, setActiveMarkerId] = useState<string | null>(null)
 
     // Chat State
     const [showChat, setShowChat] = useState(false)
@@ -36,6 +62,44 @@ export default function TomorrowPlan() {
     const [input, setInput] = useState('')
     const [chatLoading, setChatLoading] = useState(false)
     const messagesEndRef = useRef<HTMLDivElement>(null)
+    const mapContainerRef = useRef<HTMLDivElement>(null)
+
+    const { isLoaded: isGoogleMapsLoaded, loadError } = useJsApiLoader({
+        id: 'google-maps-script',
+        googleMapsApiKey: GOOGLE_MAPS_API_KEY
+    })
+
+    const getZoneCoordinate = (zoneId: string) => {
+        if (ZONE_COORDINATES[zoneId]) return ZONE_COORDINATES[zoneId]
+        const parts = zoneId.split('_')
+        for (let i = parts.length; i > 0; i--) {
+            const key = parts.slice(0, i).join('_')
+            if (ZONE_COORDINATES[key]) return ZONE_COORDINATES[key]
+        }
+        return null
+    }
+
+    const markers = useMemo(() => {
+        return forecasts
+            .map((forecast) => {
+                const coord = getZoneCoordinate(forecast.zone_id)
+                if (!coord) return null
+                return {
+                    id: forecast.id,
+                    zone: forecast.zone_id,
+                    category: forecast.predicted_category,
+                    reason: forecast.reason,
+                    position: coord
+                }
+            })
+            .filter(Boolean) as {
+                id: string
+                zone: string
+                category: string
+                reason: string
+                position: { lat: number; lng: number; label: string }
+            }[]
+    }, [forecasts])
 
     useEffect(() => {
         fetchForecasts()
@@ -43,12 +107,12 @@ export default function TomorrowPlan() {
     }, [])
 
     useEffect(() => {
-        if (showChat) scrollToBottom()
-    }, [messages, showChat])
-
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }
+        if (!googleMap || mapView !== 'google' || !activeMarkerId) return
+        const marker = markers.find((item) => item.id === activeMarkerId)
+        if (!marker) return
+        googleMap.panTo({ lat: marker.position.lat, lng: marker.position.lng })
+        googleMap.setZoom(14)
+    }, [activeMarkerId, googleMap, mapView, markers])
 
     const fetchWeather = async () => {
         try {
@@ -116,6 +180,29 @@ export default function TomorrowPlan() {
         if (newSet.has(id)) newSet.delete(id)
         else newSet.add(id)
         setSelectedTasks(newSet)
+    }
+
+    const handleZoomToSingapore = () => {
+        if (mapView === 'google' && googleMap) {
+            googleMap.setCenter(SINGAPORE_CENTER)
+            googleMap.setZoom(12)
+            return
+        }
+        if (mapView === 'windy') {
+            mapContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+    }
+
+    const focusOnForecast = (forecast: Forecast) => {
+        const coord = getZoneCoordinate(forecast.zone_id)
+        if (!coord) return
+        setMapView('google')
+        setActiveMarkerId(forecast.id)
+        if (googleMap) {
+            googleMap.panTo({ lat: coord.lat, lng: coord.lng })
+            googleMap.setZoom(14)
+        }
+        mapContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
 
     return (
@@ -226,6 +313,95 @@ export default function TomorrowPlan() {
                         <span className="tomorrow-plan__signal-label">Humidity</span>
                     </div>
                 </div>
+                <div className="tomorrow-plan__map">
+                    <div className="tomorrow-plan__map-header">
+                        <span className="tomorrow-plan__map-title">Live Weather Map</span>
+                        <div className="tomorrow-plan__map-actions">
+                            <Button
+                                variant={mapView === 'windy' ? 'primary' : 'ghost'}
+                                size="sm"
+                                onClick={() => setMapView('windy')}
+                            >
+                                Windy
+                            </Button>
+                            <Button
+                                variant={mapView === 'google' ? 'primary' : 'ghost'}
+                                size="sm"
+                                onClick={() => setMapView('google')}
+                            >
+                                Google Map
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={handleZoomToSingapore}>
+                                Zoom to Singapore
+                            </Button>
+                        </div>
+                    </div>
+                    <div className="tomorrow-plan__map-frame">
+                        {mapView === 'windy' && (
+                            <iframe
+                                title="Windy Live Weather Map"
+                                src={WINDY_EMBED_URL}
+                                loading="lazy"
+                                allowFullScreen
+                                referrerPolicy="no-referrer-when-downgrade"
+                            />
+                        )}
+                        {mapView === 'google' && (
+                            <div ref={mapContainerRef} className="tomorrow-plan__google-map">
+                                {!GOOGLE_MAPS_API_KEY && (
+                                    <div className="tomorrow-plan__map-fallback">Missing Google Maps API key.</div>
+                                )}
+                                {GOOGLE_MAPS_API_KEY && loadError && (
+                                    <div className="tomorrow-plan__map-fallback">Unable to load Google Maps.</div>
+                                )}
+                                {GOOGLE_MAPS_API_KEY && !loadError && isGoogleMapsLoaded && (
+                                    <GoogleMap
+                                        mapContainerClassName="tomorrow-plan__google-map-inner"
+                                        center={SINGAPORE_CENTER}
+                                        zoom={11}
+                                        onLoad={(map) => setGoogleMap(map)}
+                                        options={{
+                                            streetViewControl: false,
+                                            mapTypeControl: false,
+                                            fullscreenControl: true,
+                                            clickableIcons: false
+                                        }}
+                                    >
+                                        {markers.map((marker) => (
+                                            <MarkerF
+                                                key={marker.id}
+                                                position={marker.position}
+                                                title={marker.zone}
+                                                label={marker.position.label[0]}
+                                                onClick={() => setActiveMarkerId(marker.id)}
+                                            />
+                                        ))}
+                                        {markers
+                                            .filter((marker) => marker.id === activeMarkerId)
+                                            .map((marker) => (
+                                                <InfoWindowF
+                                                    key={`info-${marker.id}`}
+                                                    position={marker.position}
+                                                    onCloseClick={() => setActiveMarkerId(null)}
+                                                >
+                                                    <div className="tomorrow-plan__map-info">
+                                                        <div className="tomorrow-plan__map-info-title">{marker.zone}</div>
+                                                        <div className="tomorrow-plan__map-info-meta">
+                                                            {marker.category.replace('_', ' ')}
+                                                        </div>
+                                                        <div className="tomorrow-plan__map-info-reason">{marker.reason}</div>
+                                                    </div>
+                                                </InfoWindowF>
+                                            ))}
+                                    </GoogleMap>
+                                )}
+                                {GOOGLE_MAPS_API_KEY && !loadError && !isGoogleMapsLoaded && (
+                                    <div className="tomorrow-plan__map-fallback">Loading map...</div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
             </Card>
 
             <div className="tomorrow-plan__content">
@@ -239,7 +415,12 @@ export default function TomorrowPlan() {
                     ) : (
                         <div className="tomorrow-plan__forecast-list">
                             {forecasts.map((forecast) => (
-                                <Card key={forecast.id} padding="md" className="tomorrow-plan__forecast">
+                                <Card
+                                    key={forecast.id}
+                                    padding="md"
+                                    className="tomorrow-plan__forecast"
+                                    onClick={() => focusOnForecast(forecast)}
+                                >
                                     <div className="tomorrow-plan__forecast-header">
                                         <span className="tomorrow-plan__forecast-zone">{forecast.zone_id}</span>
                                         <RiskMeter value={forecast.risk_score} />

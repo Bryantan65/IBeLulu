@@ -120,6 +120,25 @@ export default function Complaints() {
             })
 
             if (response.ok) {
+                const created = await response.json()
+                const createdComplaint = Array.isArray(created) ? created[0] : created
+
+                if (createdComplaint?.id) {
+                    try {
+                        await fetch(`${SUPABASE_URL}/functions/v1/cluster-complaints`, {
+                            method: 'POST',
+                            headers: {
+                                'apikey': SUPABASE_ANON_KEY,
+                                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ complaint_id: createdComplaint.id })
+                        })
+                    } catch (clusterError) {
+                        console.error('Failed to cluster complaint:', clusterError)
+                    }
+                }
+
                 setShowForm(false)
                 setFormData({
                     text: '',
