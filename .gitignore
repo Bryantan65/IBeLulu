@@ -40,3 +40,6 @@ pnpm-debug.log*
 
 # Claude MCP Configuration
 .claude/
+
+# Amazon Q Configuration
+.amazonq/

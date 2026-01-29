@@ -5,7 +5,6 @@ import { sendMessageToAgent, ChatMessage } from '../services/orchestrate'
 import './ReviewQueue.css'
 
 const REVIEW_AGENT_ID = 'f3c41796-118f-4f5a-a77c-e29890eaca6e'
-const DISPATCH_AGENT_ID = 'ffa00917-c317-4950-9b8f-1bc8bfe98549'
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 
@@ -18,28 +17,6 @@ interface Cluster {
     assigned_playbook?: string | null
     priority_score?: number
     complaint_count?: number
-}
-
-interface RunSheet {
-    id: string
-    team_id: string
-    date: string
-    time_window: string
-    status: string
-    capacity_used_percent: number
-    created_at: string
-    task_count?: number
-    zones_covered?: string[]
-    task_details?: Array<{
-        cluster_id: string
-        zone: string
-        category: string
-    }>
-}
-
-interface Team {
-    id: string
-    name: string
 }
 
 interface ClusterReview {
@@ -197,20 +174,13 @@ function formatAgentResponse(text: string): React.ReactNode[] {
 export default function ReviewQueue() {
     const [clusters, setClusters] = useState<Cluster[]>([])
     const [reviewData, setReviewData] = useState<ClusterReview[]>([])
-    const [runSheets, setRunSheets] = useState<RunSheet[]>([])
-    const [teams, setTeams] = useState<Team[]>([])
     const [loading, setLoading] = useState(true)
     const [isAnalyzing, setIsAnalyzing] = useState(false)
     const [reviewError, setReviewError] = useState<string>('')
     const [reviewing, setReviewing] = useState<string | null>(null)
-    const [dispatching, setDispatching] = useState<string | null>(null)
-    const [dispatchResponse, setDispatchResponse] = useState<string>('')
-    const [dispatchedTeamInfo, setDispatchedTeamInfo] = useState<{ teamName: string; date: string; window: string } | null>(null)
 
     useEffect(() => {
         runReviewAnalysis()
-        fetchDraftRunSheets()
-        fetchTeams()
     }, [])
 
     const fetchTriagedClusters = async () => {
@@ -238,92 +208,7 @@ export default function ReviewQueue() {
         }
     }
 
-    const fetchTeams = async () => {
-        try {
-            const response = await fetch(`${SUPABASE_URL}/rest/v1/teams?select=id,name&status=eq.active&order=name.asc`, {
-                headers: {
-                    'apikey': SUPABASE_ANON_KEY,
-                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-                }
-            })
-            if (response.ok) {
-                const data = await response.json()
-                setTeams(data || [])
-            }
-        } catch (error) {
-            console.error('Error fetching teams:', error)
-        }
-    }
 
-    const fetchDraftRunSheets = async () => {
-        try {
-            const response = await fetch(`${SUPABASE_URL}/rest/v1/run_sheets?select=id,team_id,date,time_window,status,capacity_used_percent,created_at,zones_covered&status=eq.draft&order=date.asc,time_window.asc`, {
-                headers: {
-                    'apikey': SUPABASE_ANON_KEY,
-                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-                }
-            })
-            if (response.ok) {
-                const sheets = await response.json()
-                // Fetch task counts and details for each run sheet
-                const sheetsWithDetails = await Promise.all(
-                    sheets.map(async (sheet: RunSheet) => {
-                        const tasksResponse = await fetch(`${SUPABASE_URL}/rest/v1/run_sheet_tasks?select=task_id&run_sheet_id=eq.${sheet.id}`, {
-                            headers: {
-                                'apikey': SUPABASE_ANON_KEY,
-                                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-                            }
-                        })
-                        const runSheetTasks = tasksResponse.ok ? await tasksResponse.json() : []
-                        
-                        // Fetch task details which includes cluster_id
-                        const taskDetails = await Promise.all(
-                            runSheetTasks.map(async (rst: any) => {
-                                const taskResponse = await fetch(`${SUPABASE_URL}/rest/v1/tasks?select=cluster_id&id=eq.${rst.task_id}`, {
-                                    headers: {
-                                        'apikey': SUPABASE_ANON_KEY,
-                                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-                                    }
-                                })
-                                if (taskResponse.ok) {
-                                    const tasks = await taskResponse.json()
-                                    if (tasks.length > 0 && tasks[0].cluster_id) {
-                                        // Now fetch cluster details
-                                        const clusterResponse = await fetch(`${SUPABASE_URL}/rest/v1/clusters?select=zone_id,category&id=eq.${tasks[0].cluster_id}`, {
-                                            headers: {
-                                                'apikey': SUPABASE_ANON_KEY,
-                                                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-                                            }
-                                        })
-                                        if (clusterResponse.ok) {
-                                            const clusters = await clusterResponse.json()
-                                            if (clusters.length > 0) {
-                                                return {
-                                                    cluster_id: tasks[0].cluster_id,
-                                                    zone: clusters[0].zone_id,
-                                                    category: clusters[0].category
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                return null
-                            })
-                        )
-                        
-                        return { 
-                            ...sheet, 
-                            task_count: runSheetTasks.length,
-                            task_details: taskDetails.filter(t => t !== null)
-                        }
-                    })
-                )
-                setRunSheets(sheetsWithDetails || [])
-            }
-        } catch (error) {
-            console.error('Error fetching draft run sheets:', error)
-        }
-    }
 
     const runReviewAnalysis = async () => {
         setIsAnalyzing(true)
@@ -429,71 +314,7 @@ NO markdown formatting. NO backticks. ONLY the JSON array.`
         }
     }
 
-    const handleDispatchRunSheet = async (runSheet: RunSheet) => {
-        try {
-            setDispatching(runSheet.id)
-            setDispatchResponse('')
 
-            const team = teams.find(t => t.id === runSheet.team_id)
-            const teamName = team?.name || runSheet.team_id
-            const date = new Date(runSheet.date)
-            const dateStr = date.toLocaleDateString('en-US', { 
-                month: 'short', 
-                day: 'numeric',
-                year: 'numeric'
-            })
-
-            // Store team info for display
-            setDispatchedTeamInfo({
-                teamName,
-                date: dateStr,
-                window: runSheet.time_window
-            })
-
-            const dispatchMessage: ChatMessage = {
-                role: 'user',
-                text: `Review and dispatch this draft run sheet:
-
-Run Sheet ID: ${runSheet.id}
-Team: ${teamName}
-Date: ${runSheet.date}
-Time Window: ${runSheet.time_window}
-Tasks: ${runSheet.task_count || 0} assigned
-Capacity Used: ${runSheet.capacity_used_percent}%
-
-Please review the run sheet tasks and provide dispatch instructions. If approved, add dispatch notes and confirm readiness for field deployment.`
-            }
-
-            const response = await sendMessageToAgent([dispatchMessage], DISPATCH_AGENT_ID)
-            setDispatchResponse(response)
-
-            // Update run sheet status to dispatched
-            await fetch(
-                `${SUPABASE_URL}/rest/v1/run_sheets?id=eq.${runSheet.id}`,
-                {
-                    method: 'PATCH',
-                    headers: {
-                        'apikey': SUPABASE_ANON_KEY,
-                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-                        'Content-Type': 'application/json',
-                        'Prefer': 'return=representation'
-                    },
-                    body: JSON.stringify({
-                        status: 'dispatched',
-                        dispatched_at: new Date().toISOString()
-                    })
-                }
-            )
-
-            // Refresh the list
-            await fetchDraftRunSheets()
-        } catch (error) {
-            console.error('Error dispatching run sheet:', error)
-            alert('Failed to dispatch run sheet. Please try again.')
-        } finally {
-            setDispatching(null)
-        }
-    }
 
     if (loading) {
         return (
@@ -508,8 +329,6 @@ Please review the run sheet tasks and provide dispatch instructions. If approved
 
     return (
         <div className="review-queue">
-            {/* Clusters Section */}
-            <div className="review-queue__section">
                 <div className="review-queue__header">
                     <span className="review-queue__count">
                         {clusters.length} triaged cluster{clusters.length !== 1 ? 's' : ''}
@@ -631,136 +450,6 @@ Please review the run sheet tasks and provide dispatch instructions. If approved
                         <p>{reviewError || 'No triaged clusters found.'}</p>
                     </div>
                 )}
-            </div>
-
-            {/* Run Sheets Section */}
-            <div className="review-queue__section review-queue__section--runsheets">
-                <div className="review-queue__header">
-                    <span className="review-queue__count">
-                        {runSheets.length} draft run sheet{runSheets.length !== 1 ? 's' : ''}
-                    </span>
-                    <div className="review-queue__actions">
-                        <Button
-                            variant="ghost"
-                            icon={<RefreshCw size={16} />}
-                            onClick={fetchDraftRunSheets}
-                        >
-                            Refresh
-                        </Button>
-                    </div>
-                </div>
-
-                {dispatchResponse && (
-                    <Card className="runsheet__agent-response">
-                        <h4>Dispatch Coordinator Response</h4>
-                        {dispatchedTeamInfo && (
-                            <div style={{ 
-                                marginBottom: 'var(--space-3)', 
-                                padding: 'var(--space-3)', 
-                                background: 'var(--color-surface-1)',
-                                borderRadius: 'var(--radius-md)',
-                                display: 'flex',
-                                gap: 'var(--space-4)',
-                                alignItems: 'center'
-                            }}>
-                                <div>
-                                    <Badge variant="info" size="sm">{dispatchedTeamInfo.teamName}</Badge>
-                                </div>
-                                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
-                                    <Clock size={14} style={{ display: 'inline', marginRight: '4px' }} />
-                                    {dispatchedTeamInfo.date} • {dispatchedTeamInfo.window}
-                                </div>
-                            </div>
-                        )}
-                        <div className="agent-response-content">
-                            {formatAgentResponse(dispatchResponse)}
-                        </div>
-                    </Card>
-                )}
-
-                {runSheets.length > 0 ? (
-                    <div className="review-queue__items review-dashboard">
-                        {runSheets.map((sheet) => {
-                            const team = teams.find(t => t.id === sheet.team_id)
-                            const teamName = team?.name || sheet.team_id
-                            const date = new Date(sheet.date)
-                            const dateStr = date.toLocaleDateString('en-US', { 
-                                month: 'short', 
-                                day: 'numeric',
-                                year: 'numeric'
-                            })
-
-                            return (
-                                <Card key={sheet.id} className="review-card">
-                                    <div className="review-card__header">
-                                        <div className="review-card__title">
-                                            <Badge variant="info" size="sm">{teamName}</Badge>
-                                            <span className="review-card__location">
-                                                <Clock size={14} /> {dateStr}
-                                            </span>
-                                        </div>
-                                        <div className="review-card__severity">
-                                            <Badge variant="warning" size="sm">{sheet.time_window}</Badge>
-                                        </div>
-                                    </div>
-
-                                    <div className="review-card__content">
-                                        <div className="review-card__info-grid">
-                                            <div className="review-card__info">
-                                                <Shield size={14} />
-                                                <span>{sheet.task_count || 0} tasks assigned</span>
-                                            </div>
-                                            <div className="review-card__info">
-                                                <AlertCircle size={14} />
-                                                <span>{sheet.capacity_used_percent}% capacity</span>
-                                            </div>
-                                        </div>
-                                        
-                                        {sheet.zones_covered && sheet.zones_covered.length > 0 && (
-                                            <div className="review-card__playbook">
-                                                <strong>Zones:</strong> {sheet.zones_covered.join(', ')}
-                                            </div>
-                                        )}
-                                        
-                                        {sheet.task_details && sheet.task_details.length > 0 && (
-                                            <div className="review-card__description">
-                                                {sheet.task_details.map((task, idx) => (
-                                                    <div key={idx} style={{ fontSize: '0.875rem', marginBottom: '0.25rem' }}>
-                                                        • {task.zone} - {task.category.replace('_', ' ')}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                        
-                                        <div className="review-card__playbook">
-                                            <strong>Status:</strong> Ready for dispatch
-                                        </div>
-                                        <div className="review-card__reason">
-                                            <strong>Created:</strong> {getTimeAgo(sheet.created_at)}
-                                        </div>
-                                    </div>
-
-                                    <div className="review-card__actions">
-                                        <Button
-                                            variant="primary"
-                                            onClick={() => handleDispatchRunSheet(sheet)}
-                                            disabled={dispatching === sheet.id}
-                                        >
-                                            {dispatching === sheet.id ? 'Dispatching...' : 'Dispatch to Field'}
-                                        </Button>
-                                    </div>
-                                </Card>
-                            )
-                        })}
-                    </div>
-                ) : (
-                    <div className="review-queue__empty">
-                        <AlertCircle size={48} />
-                        <h3>No draft run sheets</h3>
-                        <p>Create run sheets from the Run Sheet page.</p>
-                    </div>
-                )}
-            </div>
         </div>
     )
 }

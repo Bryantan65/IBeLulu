@@ -7,6 +7,7 @@ import { useOperationsStore, useThemeStore } from '../../store'
 import GlobeScene, { GlobeSceneRef } from './globe/GlobeScene'
 import ClusterMarkers, { ClusterMarkersRef, ClusterData } from './globe/ClusterMarkers'
 import SingaporeMap, { SingaporeMapRef } from './singapore/SingaporeMap'
+import PhotorealisticTiles, { PhotorealisticTilesRef } from './singapore/PhotorealisticTiles'
 import SceneOverlay, { ViewMode } from './ui/SceneOverlay'
 import { useGlobeCamera } from './hooks/useGlobeCamera'
 import { useCameraTransition } from './hooks/useCameraTransition'
@@ -52,6 +53,7 @@ export default function OperationsHub() {
     const globeRef = useRef<GlobeSceneRef>(null)
     const clusterMarkersRef = useRef<ClusterMarkersRef>(null)
     const singaporeMapRef = useRef<SingaporeMapRef>(null)
+    const photorealisticTilesRef = useRef<PhotorealisticTilesRef>(null)
 
     // State
     const [hoveredCluster, setHoveredCluster] = useState<ClusterData | null>(null)
@@ -62,6 +64,8 @@ export default function OperationsHub() {
     // Camera and transition hooks
     const { resetView } = useGlobeCamera(cameraRef.current, controlsRef.current)
     const { transitionToGlobal, transitionToSingapore } = useCameraTransition()
+    const tilesApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined
+    const showTilesAttribution = Boolean(tilesApiKey) && (viewMode === 'singapore' || isTransitioning)
 
     // Handle view mode change
     const handleModeChange = useCallback(
@@ -75,7 +79,7 @@ export default function OperationsHub() {
                     camera: cameraRef.current,
                     controls: controlsRef.current,
                     globeGroup: globeRef.current?.group,
-                    singaporeGroup: singaporeMapRef.current?.group,
+                    singaporeGroup: photorealisticTilesRef.current?.group || singaporeMapRef.current?.group,
                     markersGroup: clusterMarkersRef.current?.group,
                     onTransitionComplete: () => {
                         setViewMode('singapore')
@@ -95,7 +99,7 @@ export default function OperationsHub() {
                     camera: cameraRef.current,
                     controls: controlsRef.current,
                     globeGroup: globeRef.current?.group,
-                    singaporeGroup: singaporeMapRef.current?.group,
+                    singaporeGroup: photorealisticTilesRef.current?.group || singaporeMapRef.current?.group,
                     markersGroup: clusterMarkersRef.current?.group,
                     onTransitionComplete: () => {
                         setViewMode('global')
@@ -221,6 +225,7 @@ export default function OperationsHub() {
         // Animation loop
         const animate = () => {
             controls.update()
+            photorealisticTilesRef.current?.update()
             renderer.render(scene, camera)
             animationIdRef.current = requestAnimationFrame(animate)
         }
@@ -265,12 +270,23 @@ export default function OperationsHub() {
                         onClusterHover={setHoveredCluster}
                         isDark={isDark}
                     />
-                    <SingaporeMap
-                        ref={singaporeMapRef}
-                        scene={sceneRef.current}
-                        isDark={isDark}
-                        visible={viewMode === 'singapore' || isTransitioning}
-                    />
+                    {tilesApiKey ? (
+                        <PhotorealisticTiles
+                            ref={photorealisticTilesRef}
+                            scene={sceneRef.current}
+                            camera={cameraRef.current}
+                            renderer={rendererRef.current}
+                            apiKey={tilesApiKey}
+                            visible={viewMode === 'singapore' || isTransitioning}
+                        />
+                    ) : (
+                        <SingaporeMap
+                            ref={singaporeMapRef}
+                            scene={sceneRef.current}
+                            isDark={isDark}
+                            visible={viewMode === 'singapore' || isTransitioning}
+                        />
+                    )}
                 </>
             )}
 
@@ -290,6 +306,12 @@ export default function OperationsHub() {
                     <span className="operations-hub__tooltip-type">{hoveredCluster.country}</span>
                     <span className="operations-hub__tooltip-name">{hoveredCluster.name}</span>
                     <span className="operations-hub__tooltip-count">{hoveredCluster.count} incidents</span>
+                </div>
+            )}
+
+            {showTilesAttribution && (
+                <div className="operations-hub__attribution">
+                    © Google • Photorealistic 3D Tiles
                 </div>
             )}
         </div>
