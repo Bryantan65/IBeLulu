@@ -33,6 +33,30 @@ const initialEvidence = [
 export default function Evidence() {
     const [evidence, setEvidence] = useState(() => initialEvidence)
     const [filesMap, setFilesMap] = useState<Record<string, { beforeFile?: File | null; afterFile?: File | null; uploading?: boolean }>>({})
+    const [toasts, setToasts] = useState<Array<{ id: string; message: string; type?: 'success' | 'error' | 'info'; exiting?: boolean }>>([])
+    const [loadingItems, setLoadingItems] = useState<Set<string>>(new Set())
+
+    function pushToast(message: string, type: 'success' | 'error' | 'info' = 'info') {
+        const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+        const toast = { id, message, type, exiting: false }
+        setToasts((t) => [toast, ...t])
+
+        // start exit sequence slightly before removal to allow animation
+        const exitTimer = setTimeout(() => {
+            setToasts((t) => t.map((x) => (x.id === id ? { ...x, exiting: true } : x)))
+        }, 2700)
+
+        const removeTimer = setTimeout(() => {
+            setToasts((t) => t.filter((x) => x.id !== id))
+            clearTimeout(exitTimer)
+        }, 3000)
+
+        return () => {
+            clearTimeout(exitTimer)
+            clearTimeout(removeTimer)
+            setToasts((t) => t.filter((x) => x.id !== id))
+        }
+    }
 
     function handleUpload(itemId: string, which: 'before' | 'after', file?: File) {
         setFilesMap((s) => ({
@@ -53,19 +77,20 @@ export default function Evidence() {
         const item = evidence.find((e) => e.id === itemId)
         if (!item) return
 
+        const fm = filesMap[itemId]
+        
+        // Check if at least one image is uploaded
+        if (!fm?.beforeFile && !fm?.afterFile) {
+            pushToast('Please upload at least one image before verifying', 'error')
+            return
+        }
+
+        setLoadingItems(prev => new Set(prev).add(itemId))
         setFilesMap((s) => ({ ...(s), [itemId]: { ...(s[itemId] || {}), uploading: true } }))
 
         try {
-            const fm = filesMap[itemId]
             let beforeUrl = item.beforeImage
             let afterUrl = item.afterImage
-
-            // If no files selected, simply mark verified locally
-            if (!fm?.beforeFile && !fm?.afterFile) {
-                setEvidence((arr) => arr.map((it) => (it.id === itemId ? { ...it, status: 'VERIFIED' } : it)))
-                setFilesMap((s) => ({ ...(s), [itemId]: { beforeFile: null, afterFile: null, uploading: false } }))
-                return
-            }
 
             const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
             const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -94,25 +119,45 @@ export default function Evidence() {
 
             // Update local state to show stored URLs and mark VERIFIED
             setEvidence((arr) => arr.map((it) => (it.id === itemId ? { ...it, beforeImage: beforeUrl, afterImage: afterUrl, status: 'VERIFIED' } : it)))
-
-            // Clear file entries for this item
+            
+            // Clear file entries and images on success
             setFilesMap((s) => ({ ...(s), [itemId]: { beforeFile: null, afterFile: null, uploading: false } }))
+            
+            setLoadingItems(prev => { const next = new Set(prev); next.delete(itemId); return next })
+            pushToast('Evidence verified and uploaded successfully', 'success')
         } catch (err) {
             console.error('Upload error', err)
             setFilesMap((s) => ({ ...(s), [itemId]: { ...(s[itemId] || {}), uploading: false } }))
-            alert('Upload failed. See console for details.')
+            setLoadingItems(prev => { const next = new Set(prev); next.delete(itemId); return next })
+            pushToast('Failed to verify evidence. Please try again.', 'error')
         }
     }
 
     return (
         <div className="evidence">
+            {/* Toast container */}
+            <div className="toasts">
+                {toasts.map((t) => (
+                    <div key={t.id} className={`toast ${t.type ? `toast--${t.type}` : ''} ${t.exiting ? 'toast--exit' : 'toast--enter'}`}>
+                        <div className="toast__content">{t.message}</div>
+                    </div>
+                ))}
+            </div>
             <div className="evidence__header">
                 <span className="evidence__count">{evidence.length} pending verification</span>
             </div>
 
             <div className="evidence__list">
-                {evidence.map((item) => (
-                    <Card key={item.id} padding="lg" className="evidence__card">
+                {evidence.map((item) => {
+                    const isLoading = loadingItems.has(item.id)
+                    return (
+                    <Card key={item.id} padding="lg" className="evidence__card" style={{ position: 'relative' }}>
+                        {isLoading && (
+                            <div className="evidence__loading-overlay">
+                                <div className="evidence__loading-spinner"></div>
+                                <span>Verifying evidence...</span>
+                            </div>
+                        )}
                         <div className="evidence__card-header">
                             <div className="evidence__card-info">
                                 <span className="evidence__task-id">{item.taskId}</span>
@@ -160,7 +205,7 @@ export default function Evidence() {
                             </Button>
                         </div>
                     </Card>
-                ))}
+                )})})
             </div>
         </div>
     )
