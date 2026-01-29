@@ -1,40 +1,103 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Button, Badge, Card } from '../components/ui'
 import ImageUpload from '../components/ui/ImageUpload'
-import { Check, RotateCcw, Flag } from 'lucide-react'
+import { Check, RotateCcw, Flag, MapPin, Search } from 'lucide-react'
 import './Evidence.css'
 
-// Mock evidence data
-const initialEvidence = [
-    {
-        id: 'EV001',
-        taskId: 'T001',
-        taskType: 'bin_washdown',
-        zone: 'Bedok North',
-        status: 'PENDING',
-        submittedBy: 'Team Lead A',
-        submittedAt: '2h ago',
-        beforeImage: '/placeholder-before.jpg',
-        afterImage: '/placeholder-after.jpg',
-    },
-    {
-        id: 'EV002',
-        taskId: 'T004',
-        taskType: 'bulky_removal',
-        zone: 'Tampines East',
-        status: 'PENDING',
-        submittedBy: 'Team Lead B',
-        submittedAt: '4h ago',
-        beforeImage: '/placeholder-before.jpg',
-        afterImage: '/placeholder-after.jpg',
-    },
-]
-
 export default function Evidence() {
-    const [evidence, setEvidence] = useState(() => initialEvidence)
+    const [evidence, setEvidence] = useState<any[]>([])
+    const [filteredEvidence, setFilteredEvidence] = useState<any[]>([])
+    const [loading, setLoading] = useState(true)
+    const [searchTerm, setSearchTerm] = useState('')
+    const [teamFilter, setTeamFilter] = useState('')
+    const [locationFilter, setLocationFilter] = useState('')
+    const [statusFilter, setStatusFilter] = useState('')
     const [filesMap, setFilesMap] = useState<Record<string, { beforeFile?: File | null; afterFile?: File | null; uploading?: boolean }>>({})
     const [toasts, setToasts] = useState<Array<{ id: string; message: string; type?: 'success' | 'error' | 'info'; exiting?: boolean }>>([])
     const [loadingItems, setLoadingItems] = useState<Set<string>>(new Set())
+
+    useEffect(() => {
+        fetchTasks()
+    }, [])
+
+    async function fetchTasks() {
+        try {
+            const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+            const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+            console.log('Fetching tasks from:', `${SUPABASE_URL}/rest/v1/tasks`)
+            
+            const response = await fetch(`${SUPABASE_URL}/rest/v1/tasks?select=*,clusters(*)`, {
+                headers: {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    'Content-Type': 'application/json'
+                }
+            })
+
+            if (!response.ok) {
+                console.error('Response not ok:', response.status, response.statusText)
+                throw new Error('Failed to fetch tasks')
+            }
+            
+            const tasks = await response.json()
+            console.log('Fetched tasks:', tasks)
+            
+            // Transform tasks to evidence format
+            const evidenceData = tasks.map((task: any) => ({
+                id: task.id,
+                taskId: task.id,
+                taskType: task.task_type,
+                zone: task.clusters?.zone_id || 'Unknown Zone',
+                status: 'PENDING',
+                submittedBy: task.assigned_team || 'Unassigned',
+                submittedAt: new Date(task.created_at).toLocaleDateString(),
+                beforeImage: null,
+                afterImage: null,
+            }))
+            
+            console.log('Transformed evidence data:', evidenceData)
+            setEvidence(evidenceData)
+            setFilteredEvidence(evidenceData)
+        } catch (error) {
+            console.error('Error fetching tasks:', error)
+            pushToast('Failed to load tasks', 'error')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    // Filter and search logic
+    useEffect(() => {
+        let filtered = evidence
+
+        if (searchTerm) {
+            filtered = filtered.filter(item => 
+                item.taskId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                item.taskType.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                item.zone.toLowerCase().includes(searchTerm.toLowerCase())
+            )
+        }
+
+        if (teamFilter) {
+            filtered = filtered.filter(item => item.submittedBy === teamFilter)
+        }
+
+        if (locationFilter) {
+            filtered = filtered.filter(item => item.zone === locationFilter)
+        }
+
+        if (statusFilter) {
+            filtered = filtered.filter(item => item.status === statusFilter)
+        }
+
+        setFilteredEvidence(filtered)
+    }, [evidence, searchTerm, teamFilter, locationFilter, statusFilter])
+
+    // Get unique values for filters
+    const uniqueTeams = [...new Set(evidence.map(item => item.submittedBy))]
+    const uniqueLocations = [...new Set(evidence.map(item => item.zone))]
+    const uniqueStatuses = [...new Set(evidence.map(item => item.status))]
 
     function pushToast(message: string, type: 'success' | 'error' | 'info' = 'info') {
         const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -144,11 +207,54 @@ export default function Evidence() {
                 ))}
             </div>
             <div className="evidence__header">
-                <span className="evidence__count">{evidence.length} pending verification</span>
+                <span className="evidence__count">
+                    {loading ? 'Loading tasks...' : filteredEvidence.length === 0 ? 'No tasks to verify at the moment' : `${filteredEvidence.length} pending verification`}
+                </span>
+            </div>
+
+            <div className="evidence__controls">
+                <div className="evidence__search">
+                    <Search size={16} />
+                    <input
+                        type="text"
+                        placeholder="Search tasks..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+                <div className="evidence__filters">
+                    <select value={teamFilter} onChange={(e) => setTeamFilter(e.target.value)}>
+                        <option value="">All Teams</option>
+                        {uniqueTeams.map(team => (
+                            <option key={team} value={team}>{team}</option>
+                        ))}
+                    </select>
+                    <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
+                        <option value="">All Locations</option>
+                        {uniqueLocations.map(location => (
+                            <option key={location} value={location}>{location}</option>
+                        ))}
+                    </select>
+                    <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                        <option value="">All Status</option>
+                        {uniqueStatuses.map(status => (
+                            <option key={status} value={status}>{status}</option>
+                        ))}
+                    </select>
+                </div>
             </div>
 
             <div className="evidence__list">
-                {evidence.map((item) => {
+                {loading ? (
+                    <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-secondary)' }}>
+                        Loading tasks...
+                    </div>
+                ) : filteredEvidence.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-secondary)' }}>
+                        {evidence.length === 0 ? 'No tasks to verify at the moment' : 'No tasks match your filters'}
+                    </div>
+                ) : (
+                filteredEvidence.map((item) => {
                     const isLoading = loadingItems.has(item.id)
                     return (
                     <Card key={item.id} padding="lg" className="evidence__card" style={{ position: 'relative' }}>
@@ -160,9 +266,14 @@ export default function Evidence() {
                         )}
                         <div className="evidence__card-header">
                             <div className="evidence__card-info">
-                                <span className="evidence__task-id">{item.taskId}</span>
-                                <Badge variant="info" size="sm">{item.taskType.replace('_', ' ')}</Badge>
-                                <span className="evidence__zone">{item.zone}</span>
+                                <div className="evidence__task-details">
+                                    <span className="evidence__task-id">Task ID: {item.taskId}</span>
+                                    <Badge variant="info" size="sm">{item.taskType.replace('_', ' ')}</Badge>
+                                </div>
+                                <div className="evidence__location">
+                                    <MapPin size={14} />
+                                    <span className="evidence__zone">{item.zone}</span>
+                                </div>
                             </div>
                             <Badge variant={item.status === 'VERIFIED' ? 'success' : 'warning'} size="sm">{item.status}</Badge>
                         </div>
@@ -189,7 +300,7 @@ export default function Evidence() {
                         </div>
 
                         <div className="evidence__meta">
-                            <span>Submitted by: <strong>{item.submittedBy}</strong></span>
+                            <span>Assigned to: <strong>{item.submittedBy}</strong></span>
                             <span>{item.submittedAt}</span>
                         </div>
 
@@ -205,7 +316,9 @@ export default function Evidence() {
                             </Button>
                         </div>
                     </Card>
-                )})})
+                    )
+                })
+                )}
             </div>
         </div>
     )
