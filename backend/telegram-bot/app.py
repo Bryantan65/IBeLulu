@@ -39,6 +39,7 @@ POLL_TIMEOUT = int(os.environ.get('TELEGRAM_POLL_TIMEOUT', '50'))
 MAX_HISTORY = int(os.environ.get('WXO_MAX_HISTORY', '12'))
 DISPATCH_POLL_INTERVAL = int(os.environ.get('DISPATCH_POLL_INTERVAL', '15'))
 DISPATCH_TELEGRAM_USER_ID = os.environ.get('DISPATCH_TELEGRAM_USER_ID', '297484629').strip()
+DISPATCH_MEDIA_TELEGRAM_USER_ID = os.environ.get('DISPATCH_MEDIA_TELEGRAM_USER_ID', '836447627').strip()
 DISPATCH_LOOKBACK_SECONDS = int(os.environ.get('DISPATCH_LOOKBACK_SECONDS', '3600'))
 
 TOKEN_ENDPOINT = f"{SUPABASE_URL}/functions/v1/watson-token" if SUPABASE_URL else ''
@@ -50,6 +51,8 @@ history_by_user: Dict[int, List[Dict[str, str]]] = {}
 last_dispatch_check: int = int(time.time()) - DISPATCH_LOOKBACK_SECONDS
 last_dispatch_poll: float = 0.0
 sent_dispatch_ids: Set[str] = set()
+last_evidence_check: int = int(time.time()) - DISPATCH_LOOKBACK_SECONDS
+sent_evidence_ids: Set[str] = set()
 
 
 def log(msg: str) -> None:
@@ -175,6 +178,20 @@ def send_telegram_message(chat_id: int, text: str, parse_mode: str = 'Markdown')
         )
 
 
+def send_telegram_photo(chat_id: int, photo_url: str, caption: Optional[str] = None) -> None:
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
+    body = {'chat_id': chat_id, 'photo': photo_url}
+    if caption:
+        body['caption'] = caption
+        body['parse_mode'] = 'Markdown'
+    http_request(
+        url,
+        method='POST',
+        headers={'Content-Type': 'application/json'},
+        body=body,
+    )
+
+
 def _safe_parse_summary(value: Optional[dict]) -> dict:
     if isinstance(value, dict):
         return value
@@ -293,6 +310,161 @@ def fetch_run_sheet_task_summary(run_sheet_id: str) -> str:
         cleaned.append(line)
 
     return ' | '.join(cleaned)
+
+
+def fetch_run_sheet_evidence(run_sheet_id: str) -> List[dict]:
+    if not SUPABASE_URL or not SUPABASE_API_KEY:
+        return []
+
+    tasks_url = (
+        f"{SUPABASE_URL}/rest/v1/run_sheet_tasks?"
+        f"select=task_id&run_sheet_id=eq.{run_sheet_id}"
+    )
+    try:
+        task_links = _fetch_json(tasks_url)
+    except Exception as exc:
+        log(f'Error fetching run_sheet_tasks for evidence: {exc}')
+        return []
+
+    if not isinstance(task_links, list) or not task_links:
+        return []
+
+    task_ids = [row.get('task_id') for row in task_links if row.get('task_id')]
+    if not task_ids:
+        return []
+
+    task_ids_csv = ','.join(task_ids)
+    task_ids_filter = urllib.parse.quote(task_ids_csv, safe=',')
+    evidence_url = (
+        f"{SUPABASE_URL}/rest/v1/evidence?"
+        f"select=id,task_id,before_image_url,after_image_url,submitted_at"
+        f"&task_id=in.({task_ids_filter})"
+        f"&order=submitted_at.desc"
+        f"&limit=10"
+    )
+
+    try:
+        evidence_rows = _fetch_json(evidence_url)
+    except Exception as exc:
+        log(f'Error fetching evidence: {exc}')
+        return []
+
+    return evidence_rows if isinstance(evidence_rows, list) else []
+
+
+def fetch_task_cluster_map(task_ids: List[str]) -> dict:
+    if not task_ids or not SUPABASE_URL or not SUPABASE_API_KEY:
+        return {}
+
+    task_ids_csv = ','.join(task_ids)
+    task_ids_filter = urllib.parse.quote(task_ids_csv, safe=',')
+    task_url = (
+        f"{SUPABASE_URL}/rest/v1/tasks?"
+        f"select=id,cluster_id,task_type&id=in.({task_ids_filter})"
+    )
+    try:
+        tasks = _fetch_json(task_url)
+    except Exception as exc:
+        log(f'Error fetching tasks for evidence: {exc}')
+        return {}
+
+    cluster_ids = list({row.get('cluster_id') for row in tasks if row.get('cluster_id')})
+    cluster_map: dict = {}
+    if cluster_ids:
+        cluster_ids_csv = ','.join(cluster_ids)
+        cluster_ids_filter = urllib.parse.quote(cluster_ids_csv, safe=',')
+        cluster_url = (
+            f"{SUPABASE_URL}/rest/v1/clusters?"
+            f"select=id,description,location_label,zone_id,category&id=in.({cluster_ids_filter})"
+        )
+        try:
+            clusters = _fetch_json(cluster_url)
+            if isinstance(clusters, list):
+                cluster_map = {row.get('id'): row for row in clusters if row.get('id')}
+        except Exception as exc:
+            log(f'Error fetching clusters for evidence: {exc}')
+
+    task_map = {row.get('id'): row for row in tasks if row.get('id')}
+    return {'tasks': task_map, 'clusters': cluster_map}
+
+
+def poll_evidence_notifications() -> None:
+    global last_evidence_check
+    if not SUPABASE_URL or not SUPABASE_API_KEY:
+        return
+
+    since_iso = datetime.fromtimestamp(last_evidence_check, tz=timezone.utc).isoformat()
+    encoded_since = urllib.parse.quote(since_iso, safe='')
+    url = (
+        f"{SUPABASE_URL}/rest/v1/evidence?"
+        f"select=id,task_id,before_image_url,after_image_url,submitted_at,notes"
+        f"&submitted_at=gt.{encoded_since}"
+        f"&order=submitted_at.asc"
+        f"&limit=10"
+    )
+
+    try:
+        response = http_request(
+            url,
+            method='GET',
+            headers={
+                'apikey': SUPABASE_API_KEY,
+                'Authorization': f'Bearer {SUPABASE_API_KEY}',
+            },
+        )
+    except Exception as exc:
+        log(f'Error polling evidence notifications: {exc}')
+        log(f'Evidence polling URL: {url}')
+        return
+
+    if not isinstance(response, list) or not response:
+        return
+
+    task_ids = [row.get('task_id') for row in response if row.get('task_id')]
+    maps = fetch_task_cluster_map(task_ids)
+    task_map = maps.get('tasks', {})
+    cluster_map = maps.get('clusters', {})
+
+    for row in response:
+        evidence_id = row.get('id')
+        if not evidence_id or evidence_id in sent_evidence_ids:
+            continue
+
+        task_id = row.get('task_id') or ''
+        task_info = task_map.get(task_id, {})
+        cluster_info = cluster_map.get(task_info.get('cluster_id'), {})
+        desc = cluster_info.get('description') or cluster_info.get('location_label') or cluster_info.get('zone_id') or 'Task evidence'
+        category = cluster_info.get('category') or 'issue'
+        notes = row.get('notes') or 'Verified'
+
+        try:
+            chat_id = int(DISPATCH_MEDIA_TELEGRAM_USER_ID)
+        except Exception:
+            chat_id = 0
+
+        if chat_id:
+            header = f"✅ *Verification Complete*\n\nIssue: {category} — {desc}\nNotes: {notes}\n"
+            send_telegram_message(chat_id, header)
+
+            before_url = row.get('before_image_url')
+            after_url = row.get('after_image_url')
+            if before_url:
+                caption = f"📸 *Before* (task {str(task_id)[:8]})"
+                send_telegram_photo(chat_id, before_url, caption)
+            if after_url:
+                caption = f"✅ *After* (task {str(task_id)[:8]})"
+                send_telegram_photo(chat_id, after_url, caption)
+
+        sent_evidence_ids.add(evidence_id)
+        ts = row.get('submitted_at')
+        if ts:
+            try:
+                last_evidence_check = max(
+                    last_evidence_check,
+                    int(datetime.fromisoformat(ts.replace('Z', '+00:00')).timestamp()),
+                )
+            except Exception:
+                last_evidence_check = int(time.time())
 
 
 def poll_dispatch_notifications() -> None:
@@ -712,6 +884,7 @@ def main() -> None:
                 handle_update(update)
             if time.time() - last_dispatch_poll > DISPATCH_POLL_INTERVAL:
                 poll_dispatch_notifications()
+                poll_evidence_notifications()
                 last_dispatch_poll = time.time()
         except Exception as exc:
             log(f'Polling error: {exc}')
