@@ -27,7 +27,7 @@ export default function Evidence() {
 
             console.log('Fetching tasks from:', `${SUPABASE_URL}/rest/v1/tasks`)
             
-            const response = await fetch(`${SUPABASE_URL}/rest/v1/tasks?select=*,clusters(*)&status=eq.DONE`, {
+            const response = await fetch(`${SUPABASE_URL}/rest/v1/tasks?select=*,clusters(*)&status=eq.SCHEDULED`, {
                 headers: {
                     'apikey': SUPABASE_ANON_KEY,
                     'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
