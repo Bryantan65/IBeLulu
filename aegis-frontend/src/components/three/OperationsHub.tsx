@@ -232,6 +232,22 @@ export default function OperationsHub() {
         [updateTooltipPosition]
     )
 
+    useEffect(() => {
+        if (!selectedItem || !containerRef.current) return
+
+        const handleOutsideClick = (event: MouseEvent) => {
+            if (!containerRef.current) return
+            const target = event.target as Node
+            if (!containerRef.current.contains(target)) return
+            const tooltip = document.querySelector('.operations-hub__tooltip')
+            if (tooltip && tooltip.contains(target)) return
+            setSelectedItem(null)
+        }
+
+        window.addEventListener('click', handleOutsideClick)
+        return () => window.removeEventListener('click', handleOutsideClick)
+    }, [selectedItem])
+
     // ── Track mouse position for tooltip ──────────────────────────────
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
