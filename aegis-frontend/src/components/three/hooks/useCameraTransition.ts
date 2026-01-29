@@ -80,12 +80,18 @@ export function useCameraTransition() {
             if (singaporeGroup) {
                 // Initial state for singapore group
                 singaporeGroup.visible = true
-                singaporeGroup.scale.set(0.1, 0.1, 0.1)
-                singaporeGroup.position.set(0, 0, 0)
+                const baseScale = singaporeGroup.userData?.baseScale ?? 1
+                const basePosition = singaporeGroup.userData?.basePosition as THREE.Vector3 | undefined
+                singaporeGroup.scale.set(baseScale * 0.1, baseScale * 0.1, baseScale * 0.1)
+                if (basePosition) {
+                    singaporeGroup.position.copy(basePosition)
+                } else {
+                    singaporeGroup.position.set(0, 0, 0)
+                }
 
                 tl.fromTo(singaporeGroup.scale,
-                    { x: 0.1, y: 0.1, z: 0.1 },
-                    { x: 1, y: 1, z: 1, duration: 1, ease: 'back.out(1.2)' },
+                    { x: baseScale * 0.1, y: baseScale * 0.1, z: baseScale * 0.1 },
+                    { x: baseScale, y: baseScale, z: baseScale, duration: 1, ease: 'back.out(1.2)' },
                     1.0
                 )
             }
@@ -134,10 +140,11 @@ export function useCameraTransition() {
 
             // 2. Scale down/Fade out Singapore
             if (singaporeGroup) {
+                const baseScale = singaporeGroup.userData?.baseScale ?? 1
                 tl.to(singaporeGroup.scale, {
-                    x: 0.01,
-                    y: 0.01,
-                    z: 0.01,
+                    x: baseScale * 0.01,
+                    y: baseScale * 0.01,
+                    z: baseScale * 0.01,
                     duration: 0.8,
                     ease: 'power2.in'
                 }, 0.2)

@@ -69,6 +69,20 @@
     color: var(--color-text-muted);
 }
 
+/* Attribution (Map Tiles API requirement) */
+.operations-hub__attribution {
+    position: absolute;
+    bottom: var(--space-3);
+    right: var(--space-3);
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.8);
+    background: rgba(0, 0, 0, 0.45);
+    padding: 4px 8px;
+    border-radius: 6px;
+    pointer-events: none;
+    z-index: 3;
+}
+
 /* Loading state */
 .operations-hub__loading {
     position: absolute;
