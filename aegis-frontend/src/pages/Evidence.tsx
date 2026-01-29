@@ -44,16 +44,40 @@ export default function Evidence() {
             console.log('Fetched tasks:', tasks)
             
             // Transform tasks to evidence format
-            const evidenceData = tasks.map((task: any) => ({
-                id: task.id,
-                taskId: task.id,
-                taskType: task.task_type,
-                zone: task.clusters?.zone_id || 'Unknown Zone',
-                status: 'PENDING',
-                submittedBy: task.assigned_team || 'Unassigned',
-                submittedAt: new Date(task.created_at).toLocaleDateString(),
-                beforeImage: null,
-                afterImage: null,
+            const evidenceData = await Promise.all(tasks.map(async (task: any) => {
+                let teamName = task.assigned_team || 'Unassigned'
+                
+                // Fetch team name if assigned_team is a UUID
+                if (task.assigned_team && task.assigned_team !== 'Unassigned') {
+                    try {
+                        const teamResp = await fetch(`${SUPABASE_URL}/rest/v1/teams?id=eq.${task.assigned_team}&select=name`, {
+                            headers: {
+                                'apikey': SUPABASE_ANON_KEY,
+                                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                            }
+                        })
+                        if (teamResp.ok) {
+                            const teamData = await teamResp.json()
+                            if (teamData[0]?.name) {
+                                teamName = teamData[0].name
+                            }
+                        }
+                    } catch (e) {
+                        console.log('Could not fetch team name for:', task.assigned_team)
+                    }
+                }
+                
+                return {
+                    id: task.id,
+                    taskId: task.id,
+                    taskType: task.task_type,
+                    zone: task.clusters?.zone_id || 'Unknown Zone',
+                    status: 'PENDING',
+                    submittedBy: teamName,
+                    submittedAt: new Date(task.created_at).toLocaleDateString(),
+                    beforeImage: null,
+                    afterImage: null,
+                }
             }))
             
             console.log('Transformed evidence data:', evidenceData)
@@ -335,7 +359,7 @@ export default function Evidence() {
             </div>
             <div className="evidence__header">
                 <span className="evidence__count">
-                    {loading ? 'Loading tasks...' : filteredEvidence.length === 0 ? 'No tasks to verify at the moment' : `${filteredEvidence.length} pending verification`}
+                    {loading ? 'Loading tasks...' : filteredEvidence.length === 0 ? 'No tasks awaiting verification' : `${filteredEvidence.length} tasks awaiting verification`}
                 </span>
             </div>
 
@@ -378,13 +402,13 @@ export default function Evidence() {
                     </div>
                 ) : filteredEvidence.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-secondary)' }}>
-                        {evidence.length === 0 ? 'No tasks to verify at the moment' : 'No tasks match your filters'}
+                        {evidence.length === 0 ? 'No tasks awaiting verification' : 'No tasks match your filters'}
                     </div>
                 ) : (
                 filteredEvidence.map((item) => {
                     const isLoading = loadingItems.has(item.id)
                     return (
-                    <Card key={item.id} padding="lg" className="evidence__card" style={{ position: 'relative' }}>
+                    <Card key={item.id} padding="lg" className="evidence__card evidence__card--relative">
                         {isLoading && (
                             <div className="evidence__loading-overlay">
                                 <div className="evidence__loading-spinner"></div>
