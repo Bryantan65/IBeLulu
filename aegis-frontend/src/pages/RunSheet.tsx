@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button, Badge, Card } from '../components/ui'
-import { Download, Send, Calendar, Clock, Sparkles, Loader, RefreshCw } from 'lucide-react'
+import { Download, Send, Calendar, Clock, Sparkles, Loader, RefreshCw, CheckCircle, ArrowRight } from 'lucide-react'
 import { sendMessageToAgent, ChatMessage } from '../services/orchestrate'
 import './RunSheet.css'
 
 const RUNSHEET_PLANNER_AGENT_ID = '3526a9b1-95e0-48f4-ba44-8cfdc5cb3de7'
+const DISPATCH_AGENT_ID = 'ffa00917-c317-4950-9b8f-1bc8bfe98549'
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 
@@ -51,6 +53,8 @@ interface GroupedRunSheets {
 }
 
 export default function RunSheet() {
+    const navigate = useNavigate()
+    const teamsRef = useRef<HTMLDivElement | null>(null)
     const [reviewedClusters, setReviewedClusters] = useState<Cluster[]>([])
     const [runSheets, setRunSheets] = useState<RunSheet[]>([])
     const [groupedSheets, setGroupedSheets] = useState<GroupedRunSheets>({})
@@ -58,6 +62,9 @@ export default function RunSheet() {
     const [optimizing, setOptimizing] = useState(false)
     const [agentResponse, setAgentResponse] = useState<string>('')
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+    const [dispatching, setDispatching] = useState<string | null>(null)
+    const [dispatchResponse, setDispatchResponse] = useState<string>('')
+    const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'dispatched' | 'in_progress' | 'completed'>('all')
 
     useEffect(() => {
         fetchData()
@@ -155,6 +162,7 @@ export default function RunSheet() {
                     // Refresh data after optimization
                     await new Promise(resolve => setTimeout(resolve, 2000))
                     await fetchData()
+                    setStatusFilter('draft')
                     return // Success, exit function
                 } catch (error: any) {
                     lastError = error
@@ -180,6 +188,80 @@ export default function RunSheet() {
             setOptimizing(false)
         }
     }
+
+    const handleShowDrafts = () => {
+        setStatusFilter('draft')
+        requestAnimationFrame(() => {
+            teamsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        })
+    }
+
+    const handleDispatchRunSheet = async (sheet: RunSheet, teamName: string) => {
+        try {
+            setDispatching(sheet.id)
+            setDispatchResponse('')
+
+            const date = new Date(sheet.date)
+            const dateStr = date.toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric',
+                year: 'numeric'
+            })
+
+            const dispatchMessage: ChatMessage = {
+                role: 'user',
+                text: `Dispatch this run sheet to the field team:
+
+Run Sheet ID: ${sheet.id}
+Team: ${teamName}
+Date: ${dateStr}
+Time Window: ${sheet.time_window}
+Tasks: ${sheet.run_sheet_tasks?.length || 0} assigned
+Capacity Used: ${sheet.capacity_used_percent}%
+Zones: ${sheet.zones_covered?.join(', ') || 'N/A'}
+
+Provide dispatch confirmation and field instructions.`
+            }
+
+            const response = await sendMessageToAgent([dispatchMessage], DISPATCH_AGENT_ID)
+            setDispatchResponse(response)
+
+            // Update run sheet status to dispatched
+            await fetch(
+                `${SUPABASE_URL}/rest/v1/run_sheets?id=eq.${sheet.id}`,
+                {
+                    method: 'PATCH',
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=representation'
+                    },
+                    body: JSON.stringify({
+                        status: 'dispatched',
+                        dispatched_at: new Date().toISOString()
+                    })
+                }
+            )
+
+            // Refresh data
+            await fetchData()
+        } catch (error) {
+            console.error('Error dispatching run sheet:', error)
+            setDispatchResponse('❌ Failed to dispatch run sheet. Please try again.')
+        } finally {
+            setDispatching(null)
+        }
+    }
+
+    const draftRunSheets = runSheets.filter(sheet => sheet.status === 'draft')
+    const hasReviewedClusters = reviewedClusters.length > 0
+    const hasRunSheets = runSheets.length > 0
+    const hasDrafts = draftRunSheets.length > 0
+    const hasDispatched = runSheets.some(sheet => sheet.status !== 'draft')
+    const filteredRunSheets = statusFilter === 'all'
+        ? runSheets
+        : runSheets.filter(sheet => sheet.status === statusFilter)
 
     if (loading) {
         return (
@@ -225,14 +307,188 @@ export default function RunSheet() {
                 </div>
             </div>
 
+            {/* Workflow */}
+            <div className="runsheet__workflow">
+                <div className={`runsheet__workflow-step ${hasReviewedClusters ? 'runsheet__workflow-step--complete' : 'runsheet__workflow-step--active'}`}>
+                    <div className="runsheet__workflow-icon">
+                        {hasReviewedClusters ? <CheckCircle size={16} /> : <Sparkles size={16} />}
+                    </div>
+                    <div>
+                        <p>Reviewed clusters</p>
+                        <span>{hasReviewedClusters ? 'Ready for planning' : 'Waiting for review'}</span>
+                    </div>
+                </div>
+                <div className={`runsheet__workflow-step ${hasRunSheets ? 'runsheet__workflow-step--complete' : hasReviewedClusters ? 'runsheet__workflow-step--active' : ''}`}>
+                    <div className="runsheet__workflow-icon">
+                        {hasRunSheets ? <CheckCircle size={16} /> : <Sparkles size={16} />}
+                    </div>
+                    <div>
+                        <p>AI optimize</p>
+                        <span>{hasRunSheets ? 'Drafts created' : 'Generate run sheets'}</span>
+                    </div>
+                </div>
+                <div className={`runsheet__workflow-step ${hasDrafts ? 'runsheet__workflow-step--active' : hasRunSheets ? 'runsheet__workflow-step--complete' : ''}`}>
+                    <div className="runsheet__workflow-icon">
+                        {hasDrafts ? <Sparkles size={16} /> : <CheckCircle size={16} />}
+                    </div>
+                    <div>
+                        <p>Review drafts</p>
+                        <span>{hasDrafts ? 'Dispatch from here' : hasRunSheets ? 'No drafts' : 'Pending'}</span>
+                    </div>
+                </div>
+                <div className={`runsheet__workflow-step ${hasDispatched ? 'runsheet__workflow-step--complete' : hasDrafts ? 'runsheet__workflow-step--active' : ''}`}>
+                    <div className="runsheet__workflow-icon">
+                        {hasDispatched ? <CheckCircle size={16} /> : <Send size={16} />}
+                    </div>
+                    <div>
+                        <p>Dispatch</p>
+                        <span>{hasDispatched ? 'Sent to field' : 'Waiting to dispatch'}</span>
+                    </div>
+                </div>
+            </div>
+
             {/* Info Banner */}
             {reviewedClusters.length > 0 && (
                 <Card className="runsheet__info-banner">
-                    <p>📋 <strong>{reviewedClusters.length}</strong> reviewed clusters ready for scheduling</p>
+                    <div className="runsheet__info-banner-content">
+                        <p>📋 <strong>{reviewedClusters.length}</strong> reviewed clusters ready for scheduling</p>
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            icon={optimizing ? <Loader size={14} className="spinner" /> : <Sparkles size={14} />}
+                            onClick={handleOptimizeRunSheets}
+                            disabled={optimizing || reviewedClusters.length === 0}
+                        >
+                            {optimizing ? 'Optimizing...' : 'Optimize now'}
+                        </Button>
+                    </div>
                 </Card>
             )}
 
+            {/* Drafts Banner */}
+            {hasDrafts && (
+                <Card className="runsheet__drafts-banner">
+                    <div className="runsheet__drafts-header">
+                        <div>
+                            <h4>Draft run sheets ready</h4>
+                            <p>{draftRunSheets.length} draft{draftRunSheets.length !== 1 ? 's' : ''} waiting for dispatch. Review and send below.</p>
+                        </div>
+                        <div className="runsheet__drafts-actions">
+                            <Button variant="primary" size="sm" icon={<ArrowRight size={14} />} onClick={handleShowDrafts}>
+                                Review drafts
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => navigate('/review')}>
+                                Open review queue
+                            </Button>
+                        </div>
+                    </div>
+                    <div className="runsheet__drafts-grid">
+                        {draftRunSheets.slice(0, 3).map((sheet) => {
+                            const teamName = sheet.teams?.name || 'Unknown Team'
+                            return (
+                                <div key={sheet.id} className="runsheet__draft-card">
+                                    <div className="runsheet__draft-card-header">
+                                        <span className="runsheet__draft-card-team">{teamName}</span>
+                                        <Badge variant="warning" size="sm">Draft</Badge>
+                                    </div>
+                                    <div className="runsheet__draft-card-meta">
+                                        <span>{sheet.time_window} window</span>
+                                        <span>{sheet.run_sheet_tasks?.length || 0} tasks</span>
+                                        <span>{sheet.capacity_used_percent}% capacity</span>
+                                    </div>
+                                    <div className="runsheet__draft-card-zones">
+                                        {sheet.zones_covered?.join(', ') || 'No zones'}
+                                    </div>
+                                    <Button
+                                        variant="primary"
+                                        size="sm"
+                                        icon={dispatching === sheet.id ? <Loader size={14} className="spinner" /> : <Send size={14} />}
+                                        onClick={() => handleDispatchRunSheet(sheet, teamName)}
+                                        disabled={dispatching === sheet.id}
+                                    >
+                                        {dispatching === sheet.id ? 'Dispatching...' : 'Dispatch now'}
+                                    </Button>
+                                </div>
+                            )
+                        })}
+                        {draftRunSheets.length > 3 && (
+                            <button className="runsheet__drafts-more" onClick={handleShowDrafts}>
+                                View all drafts
+                            </button>
+                        )}
+                    </div>
+                </Card>
+            )}
+
+            {/* Filters */}
+            {hasRunSheets && (
+                <div className="runsheet__filters">
+                    <div className="runsheet__filters-group">
+                        <span>Show:</span>
+                        {[
+                            { id: 'all', label: 'All' },
+                            { id: 'draft', label: 'Drafts' },
+                            { id: 'dispatched', label: 'Dispatched' },
+                            { id: 'in_progress', label: 'In progress' },
+                            { id: 'completed', label: 'Completed' }
+                        ].map(filter => (
+                            <button
+                                key={filter.id}
+                                className={`runsheet__filter-chip ${statusFilter === filter.id ? 'runsheet__filter-chip--active' : ''}`}
+                                onClick={() => setStatusFilter(filter.id as typeof statusFilter)}
+                            >
+                                {filter.label}
+                            </button>
+                        ))}
+                    </div>
+                    <Badge variant="neutral" size="sm">
+                        Showing {filteredRunSheets.length} of {runSheets.length}
+                    </Badge>
+                </div>
+            )}
+
             {/* Agent Response */}
+            {/* Dispatch Response */}
+            {dispatchResponse && (
+                <Card className="runsheet__agent-response runsheet__agent-response--dispatch">
+                    <h4>✅ Dispatch Confirmation</h4>
+                    <div className="runsheet__agent-response-content">
+                        {(() => {
+                            const renderWithBold = (text: string) => {
+                                const doublePattern = /\*\*(.+?)\*\*/g
+                                let remaining = text.replace(doublePattern, (match, content) => {
+                                    return `<BOLD>${content}</BOLD>`
+                                })
+                                
+                                const singlePattern = /\*([^*]+?)\*/g
+                                remaining = remaining.replace(singlePattern, (match, content) => {
+                                    return `<BOLD>${content}</BOLD>`
+                                })
+                                
+                                const segments = remaining.split(/(<BOLD>.*?<\/BOLD>)/)
+                                return segments.map((segment, i) => {
+                                    if (segment.startsWith('<BOLD>')) {
+                                        const content = segment.replace('<BOLD>', '').replace('</BOLD>', '')
+                                        return <strong key={i}>{content}</strong>
+                                    }
+                                    return segment
+                                })
+                            }
+
+                            const lines = dispatchResponse.split('\n')
+                            return lines.map((line, index) => {
+                                if (line.trim().startsWith('-') || line.trim().startsWith('•')) {
+                                    return <li key={index}>{renderWithBold(line.replace(/^[\s-•]+/, ''))}</li>
+                                } else if (line.trim()) {
+                                    return <p key={index}>{renderWithBold(line)}</p>
+                                }
+                                return <br key={index} />
+                            })
+                        })()}
+                    </div>
+                </Card>
+            )}
+
             {agentResponse && (
                 <Card className="runsheet__agent-response">
                     <h4>🤖 AI Planner Response</h4>
@@ -379,15 +635,31 @@ export default function RunSheet() {
                 </Card>
             )}
 
+            {runSheets.length > 0 && filteredRunSheets.length === 0 && (
+                <Card className="runsheet__empty">
+                    <Sparkles size={48} opacity={0.3} />
+                    <h3>No Run Sheets Match This Filter</h3>
+                    <p>Try switching the filter or clear to see all run sheets.</p>
+                </Card>
+            )}
+
             {/* Team columns */}
             {Object.keys(groupedSheets).length > 0 && (
-                <div className="runsheet__teams">
-                    {Object.entries(groupedSheets).map(([teamName, windows]) => (
+                <div className="runsheet__teams" ref={teamsRef}>
+                    {Object.entries(groupedSheets).filter(([, windows]) => {
+                        if (statusFilter === 'all') return true
+                        const count = windows.AM.filter(sheet => sheet.status === statusFilter).length
+                            + windows.PM.filter(sheet => sheet.status === statusFilter).length
+                        return count > 0
+                    }).map(([teamName, windows]) => (
                         <div key={teamName} className="runsheet__team">
                             <div className="runsheet__team-header">
                                 <h3>{teamName}</h3>
                                 <Badge variant="neutral" size="sm">
-                                    {(windows.AM?.length || 0) + (windows.PM?.length || 0)} run sheets
+                                    {statusFilter === 'all'
+                                        ? (windows.AM?.length || 0) + (windows.PM?.length || 0)
+                                        : windows.AM.filter(sheet => sheet.status === statusFilter).length + windows.PM.filter(sheet => sheet.status === statusFilter).length
+                                    } run sheets
                                 </Badge>
                             </div>
 
@@ -398,10 +670,10 @@ export default function RunSheet() {
                                         <span>{window} Window</span>
                                     </div>
                                     <div className="runsheet__tasks">
-                                        {(windows[window as 'AM' | 'PM'] || []).length === 0 ? (
+                                        {(windows[window as 'AM' | 'PM'] || []).filter(sheet => statusFilter === 'all' || sheet.status === statusFilter).length === 0 ? (
                                             <p className="runsheet__empty-window">No run sheets</p>
                                         ) : (
-                                            (windows[window as 'AM' | 'PM'] || []).map((sheet) => (
+                                            (windows[window as 'AM' | 'PM'] || []).filter(sheet => statusFilter === 'all' || sheet.status === statusFilter).map((sheet) => (
                                                 <Card key={sheet.id} padding="sm" className="runsheet__task">
                                                     <div className="runsheet__task-header">
                                                         <span className="runsheet__task-id">{sheet.id.slice(0, 8)}</span>
@@ -417,8 +689,23 @@ export default function RunSheet() {
                                                     <div className="runsheet__task-capacity">
                                                         Capacity: {sheet.capacity_used_percent}%
                                                     </div>
+                                                    <div className="runsheet__task-meta">
+                                                        {sheet.run_sheet_tasks?.length || 0} tasks
+                                                    </div>
                                                     {sheet.notes && (
                                                         <div className="runsheet__task-notes">{sheet.notes}</div>
+                                                    )}
+                                                    {sheet.status === 'draft' && (
+                                                        <Button
+                                                            variant="primary"
+                                                            size="sm"
+                                                            icon={dispatching === sheet.id ? <Loader size={14} className="spinner" /> : <Send size={14} />}
+                                                            onClick={() => handleDispatchRunSheet(sheet, teamName)}
+                                                            disabled={dispatching === sheet.id}
+                                                            style={{ marginTop: '8px', width: '100%' }}
+                                                        >
+                                                            {dispatching === sheet.id ? 'Dispatching...' : 'Dispatch'}
+                                                        </Button>
                                                     )}
                                                 </Card>
                                             ))

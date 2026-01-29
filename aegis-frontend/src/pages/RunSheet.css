@@ -10,10 +10,77 @@
     align-items: center;
 }
 
+.runsheet__workflow {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-3);
+}
+
+@media (max-width: 960px) {
+    .runsheet__workflow {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+.runsheet__workflow-step {
+    display: flex;
+    gap: var(--space-3);
+    align-items: flex-start;
+    padding: var(--space-3);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--color-border-subtle);
+    background: var(--color-surface-1);
+}
+
+.runsheet__workflow-step p {
+    margin: 0 0 var(--space-1) 0;
+    font-size: var(--text-sm);
+    font-weight: var(--font-semibold);
+    color: var(--color-text);
+}
+
+.runsheet__workflow-step span {
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+}
+
+.runsheet__workflow-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--color-surface-3);
+    color: var(--color-text);
+    flex-shrink: 0;
+}
+
+.runsheet__workflow-step--active {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.1);
+}
+
+.runsheet__workflow-step--complete {
+    border-color: var(--color-success);
+    background: var(--color-success-bg);
+}
+
+.runsheet__workflow-step--complete .runsheet__workflow-icon {
+    background: var(--color-success);
+    color: #fff;
+}
+
 .runsheet__info-banner {
     background: var(--color-info-bg);
     border-left: 3px solid var(--color-primary);
     padding: var(--space-4);
+}
+
+.runsheet__info-banner-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
 }
 
 .runsheet__info-banner p {
@@ -34,6 +101,157 @@
 .runsheet__actions {
     display: flex;
     gap: var(--space-3);
+}
+
+.runsheet__drafts-banner {
+    border: 1px solid var(--color-border-subtle);
+    background: var(--color-surface-2);
+}
+
+.runsheet__drafts-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    margin-bottom: var(--space-3);
+}
+
+.runsheet__drafts-header h4 {
+    margin: 0 0 var(--space-1) 0;
+    font-size: var(--text-base);
+    color: var(--color-text);
+}
+
+.runsheet__drafts-header p {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+}
+
+.runsheet__drafts-actions {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}
+
+.runsheet__drafts-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-3);
+}
+
+@media (max-width: 1024px) {
+    .runsheet__drafts-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 640px) {
+    .runsheet__header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--space-3);
+    }
+
+    .runsheet__info-banner-content {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .runsheet__drafts-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .runsheet__drafts-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.runsheet__draft-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-lg);
+    padding: var(--space-3);
+    background: var(--color-surface-1);
+}
+
+.runsheet__draft-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+}
+
+.runsheet__draft-card-team {
+    font-size: var(--text-sm);
+    font-weight: var(--font-semibold);
+    color: var(--color-text);
+}
+
+.runsheet__draft-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+}
+
+.runsheet__draft-card-zones {
+    font-size: var(--text-sm);
+    color: var(--color-text);
+}
+
+.runsheet__drafts-more {
+    border: 1px dashed var(--color-border);
+    background: transparent;
+    border-radius: var(--radius-lg);
+    padding: var(--space-3);
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.runsheet__drafts-more:hover {
+    border-color: var(--color-primary);
+    color: var(--color-text);
+}
+
+.runsheet__filters {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
+.runsheet__filters-group {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+}
+
+.runsheet__filter-chip {
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-1);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: var(--text-xs);
+    color: var(--color-text);
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.runsheet__filter-chip--active {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: #fff;
 }
 
 /* Teams */
@@ -154,6 +372,11 @@
     padding: var(--space-4);
     background: var(--color-surface-2);
     border-left: 3px solid var(--color-primary);
+}
+
+.runsheet__agent-response--dispatch {
+    background: var(--color-success-bg);
+    border-left: 3px solid var(--color-success);
 }
 
 .runsheet__agent-response > h4 {
