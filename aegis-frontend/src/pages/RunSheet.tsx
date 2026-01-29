@@ -62,13 +62,9 @@ export default function RunSheet() {
     const [optimizing, setOptimizing] = useState(false)
     const [agentResponse, setAgentResponse] = useState<string>('')
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
-<<<<<<< HEAD
     const [dispatching, setDispatching] = useState<string | null>(null)
     const [dispatchResponse, setDispatchResponse] = useState<string>('')
     const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'dispatched' | 'in_progress' | 'completed'>('all')
-=======
-    const repeatDispatchesAvoided = Math.max(0, Math.round(reviewedClusters.length * 0.25))
->>>>>>> 2f759ea8e3a257546adac064f021f3f48c8e0101
 
     useEffect(() => {
         fetchData()
