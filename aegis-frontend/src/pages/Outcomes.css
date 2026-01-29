@@ -37,6 +37,29 @@
     width: 100%;
 }
 
+/* Environmental Outcomes */
+.outcomes__environment {
+    padding: var(--space-6);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.outcomes__environment h3 {
+    font-size: var(--text-lg);
+}
+
+.outcomes__environment-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--space-3);
+}
+
+.outcomes__environment-note {
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+}
+
 /* Playbooks */
 .outcomes__playbooks {
     padding: var(--space-6);

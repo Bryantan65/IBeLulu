@@ -12,6 +12,11 @@ const mockMetrics = {
     distanceSaved: { value: '23%', trend: 'up' as const, delta: '+8%' },
 }
 
+const environmentalAssumptions = {
+    baselineDistanceKmPerWeek: 120,
+    co2KgPerKm: 0.27,
+}
+
 const mockTrendData = [
     { day: 'Mon', dispatch: 3.2, resolve: 22, repeat: 12 },
     { day: 'Tue', dispatch: 2.8, resolve: 20, repeat: 10 },
@@ -30,6 +35,14 @@ const mockPlaybooks = [
 ]
 
 export default function Outcomes() {
+    const distanceSavedPct = parseFloat(mockMetrics.distanceSaved.value) / 100
+    const co2SavedKg = Math.round(
+        environmentalAssumptions.baselineDistanceKmPerWeek *
+        distanceSavedPct *
+        environmentalAssumptions.co2KgPerKm
+    )
+    const co2SavedKgMonthly = co2SavedKg * 4
+
     return (
         <div className="outcomes">
             {/* KPI Cards */}
@@ -70,6 +83,30 @@ export default function Outcomes() {
                     icon={<Route size={18} />}
                 />
             </div>
+
+            {/* Environmental Outcomes */}
+            <Card className="outcomes__environment">
+                <h3>Environmental Outcomes (Proxy)</h3>
+                <div className="outcomes__environment-grid">
+                    <MetricCard
+                        label="Estimated CO2e Saved"
+                        value={`${co2SavedKg} kg/week`}
+                        trend={mockMetrics.distanceSaved.trend}
+                        trendValue={mockMetrics.distanceSaved.delta}
+                        icon={<Route size={18} />}
+                    />
+                    <MetricCard
+                        label="Estimated CO2e Saved"
+                        value={`${co2SavedKgMonthly} kg/month`}
+                        trend={mockMetrics.distanceSaved.trend}
+                        trendValue={mockMetrics.distanceSaved.delta}
+                        icon={<Route size={18} />}
+                    />
+                </div>
+                <p className="outcomes__environment-note">
+                    Proxy estimate based on distance saved vs unbundled dispatch and a standard kg CO2e/km factor.
+                </p>
+            </Card>
 
             {/* Trend Chart */}
             <Card className="outcomes__chart">
