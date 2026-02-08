@@ -1,5 +1,5 @@
 // Scene Overlay - Mode indicator, controls, and legend
-import { Globe, Map, RotateCcw, ZoomIn, ZoomOut, Layers } from 'lucide-react'
+import { Globe, Map, RotateCcw, ZoomIn, ZoomOut, Layers, RefreshCw } from 'lucide-react'
 import './SceneOverlay.css'
 
 export type ViewMode = 'global' | 'singapore'
@@ -10,6 +10,8 @@ interface SceneOverlayProps {
     onResetView: () => void
     onZoomIn?: () => void
     onZoomOut?: () => void
+    onRefresh?: () => void
+    isRefreshing?: boolean
     showLayersPanel?: boolean
     onToggleLayers?: () => void
     isTransitioning?: boolean
@@ -21,6 +23,8 @@ export default function SceneOverlay({
     onResetView,
     onZoomIn,
     onZoomOut,
+    onRefresh,
+    isRefreshing = false,
     showLayersPanel,
     onToggleLayers,
     isTransitioning = false,
@@ -98,6 +102,20 @@ export default function SceneOverlay({
                 >
                     <RotateCcw size={18} />
                 </button>
+
+                {onRefresh && (
+                    <>
+                        <div className="scene-overlay__divider" />
+                        <button
+                            className="scene-overlay__btn scene-overlay__btn--icon"
+                            onClick={onRefresh}
+                            disabled={isRefreshing || isTransitioning}
+                            title="Refresh Data"
+                        >
+                            <RefreshCw size={18} className={isRefreshing ? 'scene-overlay__spin' : ''} />
+                        </button>
+                    </>
+                )}
 
                 {onToggleLayers && (
                     <button

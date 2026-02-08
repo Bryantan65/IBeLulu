@@ -207,6 +207,7 @@ export default function OperationsHub() {
     const [complaintsData, setComplaintsData] = useState<ComplaintData[]>([])
     const [selectedItem, setSelectedItem] = useState<{ type: 'cluster' | 'complaint'; data: ClusterData | ComplaintData } | null>(null)
     const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+    const [isRefreshing, setIsRefreshing] = useState(false)
 
     const { viewMode, isTransitioning, setViewMode, setIsTransitioning, setSceneReady } = useOperationsStore()
     const tilesApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string
@@ -553,6 +554,15 @@ export default function OperationsHub() {
         })
     }, [viewMode])
 
+    const handleRefresh = useCallback(async () => {
+        setIsRefreshing(true)
+        try {
+            await fetchData()
+        } finally {
+            setIsRefreshing(false)
+        }
+    }, [fetchData])
+
     return (
         <div className="operations-hub" ref={containerRef}>
             {/* Google Maps 3D container */}
@@ -568,6 +578,8 @@ export default function OperationsHub() {
                 onResetView={handleResetView}
                 onZoomIn={handleZoomIn}
                 onZoomOut={handleZoomOut}
+                onRefresh={handleRefresh}
+                isRefreshing={isRefreshing}
                 isTransitioning={isTransitioning}
             />
 

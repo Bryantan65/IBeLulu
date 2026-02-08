@@ -201,6 +201,10 @@
     }
 }
 
+.scene-overlay__spin {
+    animation: spin 0.8s linear infinite;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .scene-overlay__mode {

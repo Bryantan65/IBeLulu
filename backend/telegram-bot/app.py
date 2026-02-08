@@ -53,6 +53,8 @@ last_dispatch_poll: float = 0.0
 sent_dispatch_ids: Set[str] = set()
 last_evidence_check: int = int(time.time()) - DISPATCH_LOOKBACK_SECONDS
 sent_evidence_ids: Set[str] = set()
+evidence_sessions: Dict[int, dict] = {}
+complaint_active: Set[int] = set()  # user_ids currently in complaint mode
 
 
 def log(msg: str) -> None:
@@ -72,6 +74,60 @@ def http_request(url: str, method: str = 'GET', headers: Optional[dict] = None, 
         if not payload:
             return {}
         return json.loads(payload)
+
+
+def http_request_raw(
+    url: str,
+    method: str = 'GET',
+    headers: Optional[dict] = None,
+    body_bytes: Optional[bytes] = None,
+) -> bytes:
+    req = urllib.request.Request(url=url, data=body_bytes, method=method)
+    if headers:
+        for key, value in headers.items():
+            req.add_header(key, value)
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        return resp.read()
+
+
+def download_telegram_file(file_id: str) -> tuple:
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getFile"
+    result = http_request(
+        url,
+        method='POST',
+        headers={'Content-Type': 'application/json'},
+        body={'file_id': file_id},
+    )
+    file_path = result.get('result', {}).get('file_path', '')
+    if not file_path:
+        raise RuntimeError(f'Could not get file_path for file_id {file_id}')
+
+    download_url = f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_path}"
+    file_bytes = http_request_raw(download_url, method='GET')
+    return file_bytes, file_path
+
+
+def upload_to_supabase_storage(task_id: str, field_name: str, file_bytes: bytes, filename: str) -> str:
+    timestamp = int(time.time() * 1000)
+    safe_filename = filename.replace('/', '_').replace('\\', '_')
+    storage_path = f"{task_id}/{field_name}_{timestamp}_{safe_filename}"
+    encoded_path = urllib.parse.quote(storage_path, safe='/')
+
+    upload_url = f"{SUPABASE_URL}/storage/v1/object/evidence-photos/{encoded_path}"
+
+    http_request_raw(
+        upload_url,
+        method='POST',
+        headers={
+            'Authorization': f'Bearer {SUPABASE_SERVICE_ROLE_KEY}',
+            'Content-Type': 'image/jpeg',
+            'x-upsert': 'true',
+        },
+        body_bytes=file_bytes,
+    )
+
+    public_url = f"{SUPABASE_URL}/storage/v1/object/public/evidence-photos/{encoded_path}"
+    return public_url
 
 
 def get_valid_token() -> str:
@@ -388,6 +444,167 @@ def fetch_task_cluster_map(task_ids: List[str]) -> dict:
     return {'tasks': task_map, 'clusters': cluster_map}
 
 
+def fetch_complainers_for_cluster(cluster_id: str) -> List[str]:
+    if not SUPABASE_URL or not SUPABASE_API_KEY or not cluster_id:
+        return []
+
+    url = (
+        f"{SUPABASE_URL}/rest/v1/complaints?"
+        f"select=telegram_user_id"
+        f"&cluster_id=eq.{cluster_id}"
+    )
+    try:
+        rows = _fetch_json(url)
+    except Exception as exc:
+        log(f'Error fetching complainers for cluster {cluster_id}: {exc}')
+        return []
+
+    if not isinstance(rows, list):
+        return []
+
+    seen: Set[str] = set()
+    result: List[str] = []
+    for row in rows:
+        uid = row.get('telegram_user_id')
+        if uid and uid != 'anonymous' and uid not in seen:
+            seen.add(uid)
+            result.append(uid)
+    return result
+
+
+def lookup_task_by_prefix(prefix: str) -> Optional[dict]:
+    prefix_lower = prefix.lower()
+
+    # 1. Try direct match on SCHEDULED tasks
+    try:
+        rows = _fetch_json(
+            f"{SUPABASE_URL}/rest/v1/tasks?"
+            f"select=id,cluster_id,task_type,status"
+            f"&status=eq.SCHEDULED"
+        )
+    except Exception as exc:
+        log(f'Error looking up tasks: {exc}')
+        return None
+
+    if isinstance(rows, list):
+        matches = [r for r in rows if r.get('id', '').lower().startswith(prefix_lower)]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            return None  # ambiguous
+
+    # 2. Fallback: try matching prefix as a run_sheet ID
+    try:
+        rs_rows = _fetch_json(
+            f"{SUPABASE_URL}/rest/v1/run_sheets?"
+            f"select=id&status=eq.dispatched"
+        )
+    except Exception:
+        return None
+
+    if not isinstance(rs_rows, list):
+        return None
+
+    rs_matches = [r for r in rs_rows if r.get('id', '').lower().startswith(prefix_lower)]
+    if len(rs_matches) != 1:
+        return None
+
+    rs_id = rs_matches[0]['id']
+    try:
+        task_links = _fetch_json(
+            f"{SUPABASE_URL}/rest/v1/run_sheet_tasks?"
+            f"select=task_id&run_sheet_id=eq.{rs_id}"
+        )
+    except Exception:
+        return None
+
+    if not isinstance(task_links, list) or not task_links:
+        return None
+
+    # Get the first task from this run sheet that is SCHEDULED
+    task_ids = [r.get('task_id') for r in task_links if r.get('task_id')]
+    if not task_ids:
+        return None
+
+    task_ids_csv = ','.join(task_ids)
+    task_ids_filter = urllib.parse.quote(task_ids_csv, safe=',')
+    try:
+        tasks = _fetch_json(
+            f"{SUPABASE_URL}/rest/v1/tasks?"
+            f"select=id,cluster_id,task_type,status"
+            f"&id=in.({task_ids_filter})"
+            f"&status=eq.SCHEDULED"
+            f"&limit=1"
+        )
+    except Exception:
+        return None
+
+    if isinstance(tasks, list) and tasks:
+        return tasks[0]
+
+    return None
+
+
+def create_evidence_record(task_id: str, before_url: str, after_url: str, submitted_by: str) -> bool:
+    headers = {
+        'apikey': SUPABASE_API_KEY,
+        'Authorization': f'Bearer {SUPABASE_API_KEY}',
+        'Content-Type': 'application/json',
+    }
+
+    http_request(
+        f"{SUPABASE_URL}/rest/v1/evidence",
+        method='POST',
+        headers={**headers, 'Prefer': 'return=minimal'},
+        body={
+            'task_id': task_id,
+            'before_image_url': before_url,
+            'after_image_url': after_url,
+            'submitted_by': submitted_by,
+            'notes': 'Submitted via Telegram',
+        },
+    )
+
+    http_request(
+        f"{SUPABASE_URL}/rest/v1/tasks?id=eq.{task_id}",
+        method='PATCH',
+        headers=headers,
+        body={'status': 'VERIFIED'},
+    )
+
+    task_rows = _fetch_json(
+        f"{SUPABASE_URL}/rest/v1/tasks?id=eq.{task_id}&select=cluster_id"
+    )
+    if isinstance(task_rows, list) and task_rows:
+        cluster_id = task_rows[0].get('cluster_id')
+        if cluster_id:
+            http_request(
+                f"{SUPABASE_URL}/rest/v1/clusters?id=eq.{cluster_id}",
+                method='PATCH',
+                headers=headers,
+                body={'state': 'CLOSED'},
+            )
+
+    rst_rows = _fetch_json(
+        f"{SUPABASE_URL}/rest/v1/run_sheet_tasks?task_id=eq.{task_id}&select=run_sheet_id"
+    )
+    if isinstance(rst_rows, list) and rst_rows:
+        for rst in rst_rows:
+            rs_id = rst.get('run_sheet_id')
+            if rs_id:
+                try:
+                    http_request(
+                        f"{SUPABASE_URL}/rest/v1/run_sheets?id=eq.{rs_id}",
+                        method='PATCH',
+                        headers=headers,
+                        body={'status': 'completed'},
+                    )
+                except Exception as exc:
+                    log(f'Error updating run_sheet {rs_id}: {exc}')
+
+    return True
+
+
 def poll_evidence_notifications() -> None:
     global last_evidence_check
     if not SUPABASE_URL or not SUPABASE_API_KEY:
@@ -437,23 +654,43 @@ def poll_evidence_notifications() -> None:
         category = cluster_info.get('category') or 'issue'
         notes = row.get('notes') or 'Verified'
 
-        try:
-            chat_id = int(DISPATCH_MEDIA_TELEGRAM_USER_ID)
-        except Exception:
-            chat_id = 0
+        # Build recipient list: original complainers + supervisor
+        cluster_id = task_info.get('cluster_id')
+        recipient_ids: Set[str] = set()
+        if cluster_id:
+            for uid in fetch_complainers_for_cluster(cluster_id):
+                recipient_ids.add(uid)
+        recipient_ids.add(DISPATCH_MEDIA_TELEGRAM_USER_ID)
 
-        if chat_id:
-            header = f"✅ *Verification Complete*\n\nIssue: {category} — {desc}\nNotes: {notes}\n"
-            send_telegram_message(chat_id, header)
+        before_url = row.get('before_image_url')
+        after_url = row.get('after_image_url')
 
-            before_url = row.get('before_image_url')
-            after_url = row.get('after_image_url')
-            if before_url:
-                caption = f"📸 *Before* (task {str(task_id)[:8]})"
-                send_telegram_photo(chat_id, before_url, caption)
-            if after_url:
-                caption = f"✅ *After* (task {str(task_id)[:8]})"
-                send_telegram_photo(chat_id, after_url, caption)
+        for uid_str in recipient_ids:
+            try:
+                chat_id = int(uid_str)
+            except (ValueError, TypeError):
+                continue
+            if not chat_id:
+                continue
+
+            try:
+                header = (
+                    f"✅ *Your reported issue has been resolved!*\n\n"
+                    f"Issue: {category} — {desc}\n"
+                    f"Resolution notes: {notes}\n"
+                    f"Task reference: `{str(task_id)[:8]}`\n\n"
+                    f"Thank you for reporting this!"
+                )
+                send_telegram_message(chat_id, header)
+
+                if before_url:
+                    caption = f"📸 *Before* (task {str(task_id)[:8]})"
+                    send_telegram_photo(chat_id, before_url, caption)
+                if after_url:
+                    caption = f"✅ *After* (task {str(task_id)[:8]})"
+                    send_telegram_photo(chat_id, after_url, caption)
+            except Exception as exc:
+                log(f'Failed to notify recipient {uid_str}: {exc}')
 
         sent_evidence_ids.add(evidence_id)
         ts = row.get('submitted_at')
@@ -565,49 +802,54 @@ def poll_dispatch_notifications() -> None:
                 last_dispatch_check = int(time.time())
 
 
-def save_complaint_to_supabase(text: str, telegram_user_id: int, telegram_username: Optional[str]) -> Optional[str]:
-    """Save a complaint to the Supabase complaints table and return the complaint ID."""
+def link_telegram_to_complaint(telegram_user_id: int, telegram_username: Optional[str]) -> Optional[str]:
+    """Find the complaint the Watson agent just created and link the Telegram user to it."""
     if not SUPABASE_URL or not SUPABASE_API_KEY:
-        log('Cannot save complaint: Missing Supabase configuration')
+        log('Cannot link complaint: Missing Supabase configuration')
         return None
 
     try:
-        url = f"{SUPABASE_URL}/rest/v1/complaints"
-        complaint_data = {
-            'text': text,
-            'telegram_user_id': str(telegram_user_id),
-            'telegram_username': telegram_username or 'anonymous',
-            'status': 'RECEIVED',
-            'confidence': 0.5,
-        }
+        # Find the most recent complaint without a telegram_user_id (created by the Watson agent)
+        # that was created in the last 60 seconds
+        since_iso = datetime.fromtimestamp(time.time() - 60, tz=timezone.utc).isoformat()
+        encoded_since = urllib.parse.quote(since_iso, safe='')
+        url = (
+            f"{SUPABASE_URL}/rest/v1/complaints?"
+            f"select=id,status"
+            f"&telegram_user_id=is.null"
+            f"&created_at=gt.{encoded_since}"
+            f"&order=created_at.desc"
+            f"&limit=1"
+        )
+        response = _fetch_json(url)
 
-        response = http_request(
-            url,
-            method='POST',
+        if not isinstance(response, list) or not response:
+            log('No recent agent-created complaint found to link')
+            return None
+
+        complaint_id = response[0].get('id')
+        if not complaint_id:
+            return None
+
+        # Patch it with the Telegram user info
+        http_request(
+            f"{SUPABASE_URL}/rest/v1/complaints?id=eq.{complaint_id}",
+            method='PATCH',
             headers={
                 'apikey': SUPABASE_API_KEY,
                 'Authorization': f'Bearer {SUPABASE_API_KEY}',
                 'Content-Type': 'application/json',
-                'Prefer': 'return=representation',
             },
-            body=complaint_data,
+            body={
+                'telegram_user_id': str(telegram_user_id),
+                'telegram_username': telegram_username or 'anonymous',
+            },
         )
 
-        # Response should be a list with the created record
-        if isinstance(response, list) and len(response) > 0:
-            complaint_id = response[0].get('id')
-            log(f'Complaint saved to Supabase: {complaint_id}')
-            return complaint_id
-        elif isinstance(response, dict):
-            complaint_id = response.get('id')
-            if complaint_id:
-                log(f'Complaint saved to Supabase: {complaint_id}')
-                return complaint_id
-
-        log(f'Unexpected response format from Supabase: {response}')
-        return None
+        log(f'Linked telegram user {telegram_user_id} to complaint {complaint_id}')
+        return complaint_id
     except Exception as exc:
-        log(f'Error saving complaint to Supabase: {exc}')
+        log(f'Error linking telegram to complaint: {exc}')
         return None
 
 
@@ -634,39 +876,53 @@ def cluster_complaint(complaint_id: str) -> None:
         log(f'Error triggering cluster-complaints: {exc}')
 
 
-def check_complaint_status(complaint_id: str) -> str:
-    """Check the status of a complaint by ID."""
+def check_complaint_status(complaint_id: str, telegram_user_id: Optional[str] = None) -> str:
+    """Check the status of a complaint by partial ID prefix."""
     if not SUPABASE_URL or not SUPABASE_API_KEY:
         return '❌ Database not configured.'
 
     try:
-        url = f"{SUPABASE_URL}/rest/v1/complaints?id=eq.{complaint_id}&select=id,status,category_pred,severity_pred,created_at"
-        response = http_request(
-            url,
-            method='GET',
-            headers={
-                'apikey': SUPABASE_API_KEY,
-                'Authorization': f'Bearer {SUPABASE_API_KEY}',
-            },
-        )
+        prefix_lower = complaint_id.lower()
 
-        if isinstance(response, list) and len(response) > 0:
-            data = response[0]
-            created = data.get('created_at', '')
-            if created:
-                from datetime import datetime
-                dt = datetime.fromisoformat(created.replace('Z', '+00:00'))
-                created = dt.strftime('%Y-%m-%d')
-
-            return (
-                f"📋 *Complaint Status*\n\n"
-                f"🆔 `{data.get('id', 'N/A')}`\n"
-                f"📊 Status: *{data.get('status', 'N/A')}*\n"
-                f"📂 Category: {data.get('category_pred') or 'Processing...'}\n"
-                f"⚡ Severity: {data.get('severity_pred') or '?'}/5\n"
-                f"📅 Submitted: {created}"
+        # Fetch user's recent complaints and match prefix client-side
+        if telegram_user_id:
+            url = (
+                f"{SUPABASE_URL}/rest/v1/complaints?"
+                f"telegram_user_id=eq.{telegram_user_id}"
+                f"&select=id,status,category_pred,severity_pred,created_at"
+                f"&order=created_at.desc&limit=20"
             )
-        return '❌ Complaint not found.'
+        else:
+            url = (
+                f"{SUPABASE_URL}/rest/v1/complaints?"
+                f"select=id,status,category_pred,severity_pred,created_at"
+                f"&order=created_at.desc&limit=50"
+            )
+
+        response = _fetch_json(url)
+
+        if not isinstance(response, list) or not response:
+            return '❌ Complaint not found.'
+
+        # Match by prefix
+        matches = [r for r in response if r.get('id', '').lower().startswith(prefix_lower)]
+        if not matches:
+            return '❌ Complaint not found.'
+
+        data = matches[0]
+        created = data.get('created_at', '')
+        if created:
+            dt = datetime.fromisoformat(created.replace('Z', '+00:00'))
+            created = dt.strftime('%Y-%m-%d')
+
+        return (
+            f"📋 *Complaint Status*\n\n"
+            f"🆔 `{data.get('id', 'N/A')}`\n"
+            f"📊 Status: *{data.get('status', 'N/A')}*\n"
+            f"📂 Category: {data.get('category_pred') or 'Processing...'}\n"
+            f"⚡ Severity: {data.get('severity_pred') or '?'}/5\n"
+            f"📅 Submitted: {created}"
+        )
     except Exception as exc:
         log(f'Error checking complaint status: {exc}')
         return f'❌ Error: {exc}'
@@ -734,6 +990,77 @@ def queue_failed_message(telegram_user_id: str, chat_id: str, message_text: str,
         log(f'Error queuing failed message: {exc}')
 
 
+def handle_evidence_photo(chat_id: int, user_id: int, photos: list, message: dict) -> None:
+    session = evidence_sessions.get(user_id)
+    if not session:
+        return
+
+    if time.time() - session.get('started_at', 0) > 600:
+        del evidence_sessions[user_id]
+        send_telegram_message(chat_id, '⏰ Evidence session timed out. Use `/evidence <task_id>` to start again.')
+        return
+
+    state = session.get('state', '')
+    task_id = session.get('task_id', '')
+
+    largest_photo = photos[-1]
+    file_id = largest_photo.get('file_id', '')
+    if not file_id:
+        send_telegram_message(chat_id, '⚠️ Could not read the photo. Please try again.')
+        return
+
+    try:
+        send_telegram_message(chat_id, '⏳ Downloading photo...')
+        file_bytes, file_path = download_telegram_file(file_id)
+    except Exception as exc:
+        log(f'Error downloading telegram file: {exc}')
+        send_telegram_message(chat_id, f'⚠️ Failed to download photo: {exc}')
+        return
+
+    filename = file_path.split('/')[-1] if '/' in file_path else file_path
+
+    if state == 'waiting_before_photo':
+        session['before_photo_bytes'] = file_bytes
+        session['before_filename'] = filename
+        session['state'] = 'waiting_after_photo'
+        evidence_sessions[user_id] = session
+
+        send_telegram_message(chat_id, '✅ Before photo received.\n\nNow please send the *AFTER* photo.')
+
+    elif state == 'waiting_after_photo':
+        send_telegram_message(chat_id, '⏳ Uploading evidence...')
+
+        before_bytes = session.get('before_photo_bytes')
+        before_filename = session.get('before_filename', 'before.jpg')
+
+        try:
+            before_url = upload_to_supabase_storage(task_id, 'before', before_bytes, before_filename)
+            after_url = upload_to_supabase_storage(task_id, 'after', file_bytes, filename)
+
+            username = message.get('from', {}).get('username', 'field_worker')
+            create_evidence_record(task_id, before_url, after_url, f'telegram:{username}')
+
+            del evidence_sessions[user_id]
+
+            task_type = session.get('task_info', {}).get('task_type', 'task')
+            desc = session.get('cluster_info', {}).get('description') or 'task'
+
+            send_telegram_message(
+                chat_id,
+                f"✅ *Evidence submitted successfully!*\n\n"
+                f"Task: `{task_id[:8]}` ({task_type})\n"
+                f"Issue: {desc}\n"
+                f"Status: VERIFIED\n\n"
+                "The task has been verified and closed.",
+            )
+
+        except Exception as exc:
+            log(f'Error uploading evidence: {exc}')
+            send_telegram_message(chat_id, f'⚠️ Failed to upload evidence: {exc}\n\nPlease try again with `/evidence <task_id>`.')
+            if user_id in evidence_sessions:
+                del evidence_sessions[user_id]
+
+
 def handle_update(update: dict) -> None:
     message = update.get('message') or update.get('edited_message')
     if not message:
@@ -750,6 +1077,17 @@ def handle_update(update: dict) -> None:
     username = user.get('username')
 
     text = message.get('text') or ''
+    photos = message.get('photo')
+
+    # Handle photo messages for evidence upload flow
+    if photos and user_id:
+        if user_id in evidence_sessions:
+            handle_evidence_photo(chat_id, user_id, photos, message)
+            return
+        else:
+            send_telegram_message(chat_id, 'To upload evidence photos, first start with:\n`/evidence <task_id>`')
+            return
+
     if not text:
         return
 
@@ -757,9 +1095,10 @@ def handle_update(update: dict) -> None:
     if text.strip().lower() == '/start':
         welcome_msg = (
             "👋 *Welcome to Lulu Town Council Bot!*\n\n"
-            "📝 Send me your complaint with location\n"
+            "📝 /complaint - Submit a complaint\n"
             "🔍 /status <ID> - Check complaint\n"
             "📋 /mycomplaints - Your history\n"
+            "📸 /evidence <task\\_id> - Upload evidence\n"
             "❓ /help - Show help"
         )
         send_telegram_message(chat_id, welcome_msg)
@@ -769,9 +1108,11 @@ def handle_update(update: dict) -> None:
     if text.strip().lower() == '/help':
         help_msg = (
             "🆘 *Help & Commands*\n\n"
-            "*Submit:* Just type your complaint\n"
+            "*Submit:* /complaint\n"
             "*Check:* /status <ID>\n"
-            "*History:* /mycomplaints\n\n"
+            "*History:* /mycomplaints\n"
+            "*Evidence:* /evidence <task\\_id>\n"
+            "*Cancel:* /cancel\n\n"
             "✅ Include location\n"
             "✅ Be specific\n\n"
             "Urgent? Call 6123-4567"
@@ -795,7 +1136,7 @@ def handle_update(update: dict) -> None:
         if len(parts) < 2:
             send_telegram_message(chat_id, '⚠️ Usage: `/status <complaint_id>`')
         else:
-            status_msg = check_complaint_status(parts[1])
+            status_msg = check_complaint_status(parts[1], str(user_id) if user_id else None)
             send_telegram_message(chat_id, status_msg)
         return
 
@@ -808,56 +1149,162 @@ def handle_update(update: dict) -> None:
             send_telegram_message(chat_id, '❌ Unable to identify user.')
         return
 
-    # Handle complaint submission (any other text)
-    try:
-        send_telegram_message(chat_id, '⏳ Processing...')
+    # Handle /evidence command
+    if text.strip().lower().startswith('/evidence'):
+        parts = text.split()
+        if len(parts) < 2:
+            send_telegram_message(chat_id, '⚠️ Usage: `/evidence <task_id_prefix>`\n\nEnter at least the first 8 characters of the task ID.')
+            return
 
-        history = build_history(chat_id, text)
-        reply = call_review_agent(history)
-        store_assistant_reply(chat_id, reply)
+        prefix = parts[1].strip()
+        if len(prefix) < 8:
+            send_telegram_message(chat_id, '⚠️ Please provide at least 8 characters of the task ID.')
+            return
 
-        # Only save complaint if agent confirms it's ready to submit
-        # Check if agent's response indicates they need more info
-        reply_lower = reply.lower()
-        is_asking_questions = any(phrase in reply_lower for phrase in [
-            'need', 'tell me', 'where', 'when', 'what', 'how', 'please provide',
-            'can you', 'could you', 'more details', 'few more', 'i need'
-        ])
+        task = lookup_task_by_prefix(prefix)
+        if task is None:
+            send_telegram_message(chat_id, f"❌ No scheduled task found matching `{prefix}`.\n\nYou can use a task ID or run sheet ID prefix.")
+            return
 
-        if is_asking_questions:
-            # Agent is asking for more information, don't save yet
-            send_telegram_message(chat_id, reply)
+        task_id = task.get('id', '')
+        task_type = task.get('task_type', 'task')
+
+        cluster_info = {}
+        cluster_id = task.get('cluster_id')
+        if cluster_id:
+            try:
+                clusters = _fetch_json(
+                    f"{SUPABASE_URL}/rest/v1/clusters?"
+                    f"id=eq.{cluster_id}&select=id,description,location_label,category"
+                )
+                if isinstance(clusters, list) and clusters:
+                    cluster_info = clusters[0]
+            except Exception:
+                pass
+
+        desc = cluster_info.get('description') or cluster_info.get('location_label') or 'N/A'
+        category = cluster_info.get('category') or 'issue'
+
+        evidence_sessions[user_id] = {
+            'state': 'waiting_before_photo',
+            'task_id': task_id,
+            'task_info': task,
+            'cluster_info': cluster_info,
+            'before_photo_bytes': None,
+            'before_filename': '',
+            'started_at': time.time(),
+        }
+
+        send_telegram_message(
+            chat_id,
+            f"📋 *Evidence submission started*\n\n"
+            f"Task: `{task_id[:8]}`\n"
+            f"Type: {task_type}\n"
+            f"Issue: {category} — {desc}\n\n"
+            "📸 Please send the *BEFORE* photo now.\n"
+            "Type /cancel to abort.",
+        )
+        return
+
+    # Handle /cancel command
+    if text.strip().lower() == '/cancel':
+        cancelled = False
+        if user_id and user_id in evidence_sessions:
+            del evidence_sessions[user_id]
+            cancelled = True
+        if user_id and user_id in complaint_active:
+            complaint_active.discard(user_id)
+            history_by_user.pop(chat_id, None)
+            cancelled = True
+        if cancelled:
+            send_telegram_message(chat_id, '🚫 Cancelled.')
         else:
-            # Agent has enough info, save the complaint
-            complaint_id = None
-            if user_id:
-                # Get the full conversation context for the complaint
-                full_context = '\n'.join([msg['text'] for msg in history if msg['role'] == 'user'])
-                complaint_id = save_complaint_to_supabase(full_context, user_id, username)
+            send_telegram_message(chat_id, 'No active session to cancel.')
+        return
 
-            # Build response message
-            response_text = f"✅ *Complaint Submitted!*\n\n{reply}\n\n"
+    # If user is in evidence session but sends text, remind them to send a photo
+    if user_id and user_id in evidence_sessions:
+        session = evidence_sessions[user_id]
+        if time.time() - session.get('started_at', 0) > 600:
+            del evidence_sessions[user_id]
+            send_telegram_message(chat_id, '⏰ Evidence session timed out. Use `/evidence <task_id>` to start again.')
+        else:
+            state = session.get('state', '')
+            if state == 'waiting_before_photo':
+                send_telegram_message(chat_id, '📸 Please send a *BEFORE* photo, or type /cancel to abort.')
+            elif state == 'waiting_after_photo':
+                send_telegram_message(chat_id, '📸 Please send an *AFTER* photo, or type /cancel to abort.')
+        return
 
-            if complaint_id:
-                response_text += f"🆔 Complaint ID: `{complaint_id[:8]}`\n\n"
-                cluster_complaint(complaint_id)
-
-            response_text += "📱 /status <id>\n📋 /mycomplaints\n\nThank you! 🌟"
-
-            send_telegram_message(chat_id, response_text)
-
-    except Exception as exc:
-        log(f'Error handling message: {exc}')
-
-        # Queue failed message for retry
+    # Handle /complaint command
+    if text.strip().lower() == '/complaint':
         if user_id:
+            complaint_active.add(user_id)
+            history_by_user.pop(chat_id, None)
+        send_telegram_message(
+            chat_id,
+            "📝 *Complaint mode started*\n\n"
+            "Please describe your issue, including the location.\n"
+            "Type /cancel to abort.",
+        )
+        return
+
+    # Handle complaint conversation (only if user is in complaint mode)
+    if user_id and user_id in complaint_active:
+        try:
+            send_telegram_message(chat_id, '⏳ Processing...')
+
+            history = build_history(chat_id, text)
+            reply = call_review_agent(history)
+            store_assistant_reply(chat_id, reply)
+
+            reply_lower = reply.lower()
+            is_asking_questions = any(phrase in reply_lower for phrase in [
+                'need', 'tell me', 'where', 'when', 'what', 'how', 'please provide',
+                'can you', 'could you', 'more details', 'few more', 'i need'
+            ])
+
+            if is_asking_questions:
+                send_telegram_message(chat_id, reply)
+            else:
+                complaint_id = link_telegram_to_complaint(user_id, username)
+
+                response_text = f"✅ *Complaint Submitted!*\n\n{reply}\n\n"
+
+                if complaint_id:
+                    response_text += f"🆔 Complaint ID: `{complaint_id[:8]}`\n\n"
+                    cluster_complaint(complaint_id)
+
+                response_text += "📱 /status <id>\n📋 /mycomplaints\n\nThank you! 🌟"
+
+                send_telegram_message(chat_id, response_text)
+
+                # End complaint mode
+                complaint_active.discard(user_id)
+                history_by_user.pop(chat_id, None)
+
+        except Exception as exc:
+            log(f'Error handling message: {exc}')
+
             queue_failed_message(str(user_id), str(chat_id), text, str(exc))
 
-        error_msg = (
-            f"⚠️ *Error*\n\n{str(exc)}\n\n"
-            "Your complaint has been queued. Urgent? Call 6123-4567."
-        )
-        send_telegram_message(chat_id, error_msg)
+            error_msg = (
+                f"⚠️ *Error*\n\n{str(exc)}\n\n"
+                "Your complaint has been queued. Urgent? Call 6123-4567."
+            )
+            send_telegram_message(chat_id, error_msg)
+        return
+
+    # Unrecognized text — show available commands
+    send_telegram_message(
+        chat_id,
+        "I didn't understand that. Use one of these commands:\n\n"
+        "📝 /complaint - Submit a complaint\n"
+        "🔍 /status <ID> - Check complaint status\n"
+        "📋 /mycomplaints - View your complaints\n"
+        "📸 /evidence <task\\_id> - Upload evidence\n"
+        "❓ /help - Show all commands",
+    )
 
 
 def main() -> None:
@@ -882,10 +1329,15 @@ def main() -> None:
                 update_id = update.get('update_id', 0)
                 offset = max(offset, update_id + 1)
                 handle_update(update)
-            if time.time() - last_dispatch_poll > DISPATCH_POLL_INTERVAL:
+            now = time.time()
+            if now - last_dispatch_poll > DISPATCH_POLL_INTERVAL:
                 poll_dispatch_notifications()
                 poll_evidence_notifications()
-                last_dispatch_poll = time.time()
+                last_dispatch_poll = now
+                # Clean up stale evidence sessions (older than 10 minutes)
+                stale = [uid for uid, s in evidence_sessions.items() if now - s.get('started_at', 0) > 600]
+                for uid in stale:
+                    del evidence_sessions[uid]
         except Exception as exc:
             log(f'Polling error: {exc}')
             time.sleep(2)
