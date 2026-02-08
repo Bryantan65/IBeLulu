@@ -276,16 +276,28 @@ export default function Evidence() {
 
             if (!taskResp.ok) throw new Error('Failed to update task status')
 
-            // 4. Update run_sheet status to completed
-            const runSheetResp = await fetch(`${SUPABASE_URL}/rest/v1/run_sheets?id=in.(select run_sheet_id from run_sheet_tasks where task_id='${item.taskId}')`, {
-                method: 'PATCH',
+            // 4. Get run_sheet_id and update status to completed
+            const runSheetTasksData = await fetch(`${SUPABASE_URL}/rest/v1/run_sheet_tasks?task_id=eq.${item.taskId}&select=run_sheet_id`, {
                 headers: {
                     'apikey': SUPABASE_ANON_KEY,
-                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ status: 'completed' })
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                }
             })
+            
+            const runSheetTasksInfo = await runSheetTasksData.json()
+            if (runSheetTasksInfo?.[0]?.run_sheet_id) {
+                const runSheetResp = await fetch(`${SUPABASE_URL}/rest/v1/run_sheets?id=eq.${runSheetTasksInfo[0].run_sheet_id}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ status: 'completed' })
+                })
+                
+                if (!runSheetResp.ok) throw new Error('Failed to update run sheet status')
+            }
 
             // 5. Update cluster state to CLOSED
             const taskData = await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${item.taskId}&select=cluster_id`, {
