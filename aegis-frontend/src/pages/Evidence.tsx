@@ -25,29 +25,74 @@ export default function Evidence() {
             const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
             const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-            console.log('Fetching tasks from:', `${SUPABASE_URL}/rest/v1/tasks`)
-            
-            const response = await fetch(`${SUPABASE_URL}/rest/v1/tasks?select=*,clusters(*)&status=eq.SCHEDULED`, {
-                headers: {
-                    'apikey': SUPABASE_ANON_KEY,
-                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-                    'Content-Type': 'application/json'
+            const runSheetStatuses = ['dispatched', 'in_progress']
+            const runSheetsResp = await fetch(
+                `${SUPABASE_URL}/rest/v1/run_sheets?select=id,run_sheet_tasks(task_id)&status=in.(${runSheetStatuses.join(',')})`,
+                {
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                        'Content-Type': 'application/json'
+                    }
                 }
-            })
+            )
 
-            if (!response.ok) {
-                console.error('Response not ok:', response.status, response.statusText)
-                throw new Error('Failed to fetch tasks')
+            if (!runSheetsResp.ok) {
+                console.error('Run sheets response not ok:', runSheetsResp.status, runSheetsResp.statusText)
+                throw new Error('Failed to fetch dispatched run sheets')
             }
-            
-            const tasks = await response.json()
-            console.log('Fetched tasks:', tasks)
-            
-            // Transform tasks to evidence format
+
+            const runSheets = await runSheetsResp.json()
+            const dispatchedTaskIds = Array.from(
+                new Set(
+                    runSheets.flatMap((sheet: any) =>
+                        (sheet.run_sheet_tasks || [])
+                            .map((rst: any) => rst.task_id)
+                            .filter(Boolean)
+                    )
+                )
+            )
+
+            if (dispatchedTaskIds.length === 0) {
+                setEvidence([])
+                setFilteredEvidence([])
+                return
+            }
+
+            const chunkSize = 30
+            const taskFetches: Promise<any[]>[] = []
+            for (let i = 0; i < dispatchedTaskIds.length; i += chunkSize) {
+                const chunk = dispatchedTaskIds.slice(i, i + chunkSize)
+                const tasksUrl = `${SUPABASE_URL}/rest/v1/tasks?select=*,clusters(*)&id=in.(${chunk.join(',')})`
+                taskFetches.push(
+                    fetch(tasksUrl, {
+                        headers: {
+                            'apikey': SUPABASE_ANON_KEY,
+                            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                            'Content-Type': 'application/json'
+                        }
+                    }).then(async (resp) => {
+                        if (!resp.ok) {
+                            console.error('Tasks response not ok:', resp.status, resp.statusText)
+                            throw new Error('Failed to fetch dispatched tasks')
+                        }
+                        return resp.json()
+                    })
+                )
+            }
+
+            const taskChunks = await Promise.all(taskFetches)
+            const tasks = taskChunks.flat()
+
+            if (tasks.length === 0) {
+                setEvidence([])
+                setFilteredEvidence([])
+                return
+            }
+
             const evidenceData = await Promise.all(tasks.map(async (task: any) => {
                 let teamName = task.assigned_team || 'Unassigned'
-                
-                // Fetch team name if assigned_team is a UUID
+
                 if (task.assigned_team && task.assigned_team !== 'Unassigned') {
                     try {
                         const teamResp = await fetch(`${SUPABASE_URL}/rest/v1/teams?id=eq.${task.assigned_team}&select=name`, {
@@ -66,7 +111,7 @@ export default function Evidence() {
                         console.log('Could not fetch team name for:', task.assigned_team)
                     }
                 }
-                
+
                 return {
                     id: task.id,
                     taskId: task.id,
@@ -79,8 +124,7 @@ export default function Evidence() {
                     afterImage: null,
                 }
             }))
-            
-            console.log('Transformed evidence data:', evidenceData)
+
             setEvidence(evidenceData)
             setFilteredEvidence(evidenceData)
         } catch (error) {
