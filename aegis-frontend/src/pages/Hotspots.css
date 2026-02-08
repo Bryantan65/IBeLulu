@@ -97,12 +97,23 @@
 .hotspots__list {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
+    gap: var(--space-3);
 }
 
 .hotspots__list-header {
     display: flex;
     justify-content: space-between;
+    align-items: center;
+    padding: var(--space-4);
+    background: var(--color-elevated);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    border: none;
+}
+
+.hotspots__button-group {
+    display: flex;
+    gap: var(--space-3);
     align-items: center;
 }
 

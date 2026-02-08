@@ -20,8 +20,9 @@
 /* Sizes */
 .btn--sm {
     height: 32px;
-    padding: 0 var(--space-3);
+    padding: 0 var(--space-5);
     font-size: var(--text-sm);
+    min-width: 100px;
 }
 
 .btn--md {
@@ -43,15 +44,24 @@
 }
 
 .btn--primary:hover:not(:disabled) {
-    background: #10b981 !important;
+    background: #15803d !important;
+    color: white !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
 }
 
 [data-theme="light"] .btn--primary:hover:not(:disabled) {
-    background: #10b981 !important;
+    background: #15803d !important;
+    color: white !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
 }
 
 [data-theme="dark"] .btn--primary:hover:not(:disabled) {
-    background: #10b981 !important;
+    background: #15803d !important;
+    color: white !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
 }
 
 .btn--primary:active:not(:disabled) {
@@ -64,15 +74,24 @@
 }
 
 .btn--secondary:hover:not(:disabled) {
-    background: #d97706 !important;
+    background: #ea580c !important;
+    color: white !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
 }
 
 [data-theme="light"] .btn--secondary:hover:not(:disabled) {
-    background: #d97706 !important;
+    background: #ea580c !important;
+    color: white !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
 }
 
 [data-theme="dark"] .btn--secondary:hover:not(:disabled) {
-    background: #d97706 !important;
+    background: #ea580c !important;
+    color: white !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
 }
 
 .btn--ghost:hover:not(:disabled) {

@@ -444,9 +444,9 @@ NO markdown formatting. NO backticks. ONLY the JSON array.`
             <div className="hotspots__list">
                 <div className="hotspots__list-header">
                     <h3>Active Clusters ({clusters.length})</h3>
-                    <div className="flex gap-2">
+                    <div className="hotspots__button-group">
                         <Button
-                            variant="ghost"
+                            variant="primary"
                             size="sm"
                             icon={<RefreshCw size={14} className={loading ? 'animate-spin' : ''} />}
                             onClick={() => { setLoading(true); fetchClusters(); }}
@@ -454,20 +454,12 @@ NO markdown formatting. NO backticks. ONLY the JSON array.`
                             Refresh
                         </Button>
                         <Button
-                            variant="ghost"
+                            variant="secondary"
                             size="sm"
                             icon={<ClipboardCheck size={14} />}
                             onClick={handleReviewClusters}
                         >
                             Quick Review
-                        </Button>
-                        <Button
-                            variant="secondary"
-                            size="sm"
-                            icon={<ClipboardCheck size={14} />}
-                            onClick={() => navigate('/review')}
-                        >
-                            Review Queue
                         </Button>
                     </div>
                 </div>
