@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Button, Badge, Card } from '../components/ui'
-import { Download, Send, Calendar, Clock, Sparkles, Loader, RefreshCw } from 'lucide-react'
+import { Download, Send, Calendar, Clock, Sparkles, Loader, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react'
 import { sendMessageToAgent, ChatMessage } from '../services/orchestrate'
 import './RunSheet.css'
 
@@ -52,22 +52,96 @@ interface GroupedRunSheets {
     }
 }
 
+const WEEKDAY_LABELS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
+
+function formatDateForInput(date: Date): string {
+    const [isoDate = ''] = date.toISOString().split('T')
+    return isoDate
+}
+
+function parseDateInput(value: string): Date {
+    const [yearRaw, monthRaw, dayRaw] = value.split('-')
+    const year = Number(yearRaw)
+    const month = Number(monthRaw)
+    const day = Number(dayRaw)
+    return new Date(year, (month || 1) - 1, day || 1)
+}
+
+function formatDisplayDate(value: string): string {
+    if (!value) return 'Select date'
+    return new Intl.DateTimeFormat('en-GB', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+    }).format(parseDateInput(value))
+}
+
+function isSameDate(a: Date, b: Date): boolean {
+    return a.getFullYear() === b.getFullYear()
+        && a.getMonth() === b.getMonth()
+        && a.getDate() === b.getDate()
+}
+
 export default function RunSheet() {
+    const initialDate = formatDateForInput(new Date())
     const [reviewedClusters, setReviewedClusters] = useState<Cluster[]>([])
     const [runSheets, setRunSheets] = useState<RunSheet[]>([])
     const [groupedSheets, setGroupedSheets] = useState<GroupedRunSheets>({})
     const [loading, setLoading] = useState(true)
     const [optimizing, setOptimizing] = useState(false)
     const [agentResponse, setAgentResponse] = useState<string>('')
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+    const [selectedDate, setSelectedDate] = useState<string>(initialDate)
     const [dispatching, setDispatching] = useState<string | null>(null)
     const [dispatchResponse, setDispatchResponse] = useState<string>('')
     const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'dispatched' | 'in_progress' | 'completed'>('all')
     const [activeView, setActiveView] = useState<'drafts' | 'all' | 'activity'>('drafts')
+    const [isCalendarOpen, setIsCalendarOpen] = useState(false)
+    const [calendarDraftDate, setCalendarDraftDate] = useState<string>(initialDate)
+    const [calendarMonth, setCalendarMonth] = useState<Date>(() => parseDateInput(initialDate))
+    const calendarRef = useRef<HTMLDivElement>(null)
+
+    const calendarDraftDateObj = useMemo(() => parseDateInput(calendarDraftDate), [calendarDraftDate])
+    const today = useMemo(() => new Date(), [])
+
+    const calendarDays = useMemo(() => {
+        const year = calendarMonth.getFullYear()
+        const month = calendarMonth.getMonth()
+        const firstOfMonth = new Date(year, month, 1)
+        const firstDayOffset = (firstOfMonth.getDay() + 6) % 7 // Monday-first
+        const gridStart = new Date(year, month, 1 - firstDayOffset)
+        const days: Date[] = []
+        for (let i = 0; i < 42; i++) {
+            days.push(new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i))
+        }
+        return days
+    }, [calendarMonth])
 
     useEffect(() => {
         fetchData()
     }, [selectedDate])
+
+    useEffect(() => {
+        if (!isCalendarOpen) return
+
+        const onDocumentClick = (event: MouseEvent) => {
+            if (!calendarRef.current) return
+            if (calendarRef.current.contains(event.target as Node)) return
+            setIsCalendarOpen(false)
+        }
+
+        const onEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setIsCalendarOpen(false)
+            }
+        }
+
+        document.addEventListener('mousedown', onDocumentClick)
+        document.addEventListener('keydown', onEscape)
+        return () => {
+            document.removeEventListener('mousedown', onDocumentClick)
+            document.removeEventListener('keydown', onEscape)
+        }
+    }, [isCalendarOpen])
 
     const fetchData = async () => {
         try {
@@ -197,6 +271,31 @@ export default function RunSheet() {
         }
     }
 
+    const openCalendar = () => {
+        setCalendarDraftDate(selectedDate)
+        setCalendarMonth(parseDateInput(selectedDate))
+        setIsCalendarOpen(true)
+    }
+
+    const closeCalendar = () => {
+        setIsCalendarOpen(false)
+    }
+
+    const handleSelectCalendarDay = (day: Date) => {
+        setCalendarDraftDate(formatDateForInput(day))
+    }
+
+    const handleCalendarClear = () => {
+        const todayValue = formatDateForInput(new Date())
+        setCalendarDraftDate(todayValue)
+        setCalendarMonth(parseDateInput(todayValue))
+    }
+
+    const handleCalendarDone = () => {
+        setSelectedDate(calendarDraftDate)
+        closeCalendar()
+    }
+
     const handleDispatchRunSheet = async (sheet: RunSheet, teamName: string) => {
         try {
             setDispatching(sheet.id)
@@ -311,12 +410,83 @@ Provide dispatch confirmation and field instructions.`
             <div className="runsheet__header">
                 <div className="runsheet__date">
                     <Calendar size={20} />
-                    <input 
-                        type="date" 
-                        value={selectedDate}
-                        onChange={(e) => setSelectedDate(e.target.value)}
-                        className="runsheet__date-picker"
-                    />
+                    <div className="runsheet__calendar" ref={calendarRef}>
+                        <button
+                            type="button"
+                            className="runsheet__date-trigger"
+                            onClick={isCalendarOpen ? closeCalendar : openCalendar}
+                        >
+                            {formatDisplayDate(selectedDate)}
+                        </button>
+                        {isCalendarOpen && (
+                            <div className="runsheet__calendar-popover">
+                                <div className="runsheet__calendar-header">
+                                    <button
+                                        type="button"
+                                        className="runsheet__calendar-nav"
+                                        onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))}
+                                        aria-label="Previous month"
+                                    >
+                                        <ChevronLeft size={16} />
+                                    </button>
+                                    <strong>
+                                        {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                                    </strong>
+                                    <button
+                                        type="button"
+                                        className="runsheet__calendar-nav"
+                                        onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))}
+                                        aria-label="Next month"
+                                    >
+                                        <ChevronRight size={16} />
+                                    </button>
+                                </div>
+
+                                <div className="runsheet__calendar-weekdays">
+                                    {WEEKDAY_LABELS.map((day) => (
+                                        <span key={day}>{day}</span>
+                                    ))}
+                                </div>
+
+                                <div className="runsheet__calendar-grid">
+                                    {calendarDays.map((day) => {
+                                        const isCurrentMonth = day.getMonth() === calendarMonth.getMonth()
+                                        const isSelected = isSameDate(day, calendarDraftDateObj)
+                                        const isToday = isSameDate(day, today)
+                                        return (
+                                            <button
+                                                type="button"
+                                                key={day.toISOString()}
+                                                className={`runsheet__calendar-day ${!isCurrentMonth ? 'runsheet__calendar-day--muted' : ''} ${isSelected ? 'runsheet__calendar-day--selected' : ''} ${isToday ? 'runsheet__calendar-day--today' : ''}`}
+                                                onClick={() => handleSelectCalendarDay(day)}
+                                            >
+                                                {day.getDate()}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+
+                                <div className="runsheet__calendar-footer">
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        className="runsheet__calendar-clear"
+                                        onClick={handleCalendarClear}
+                                    >
+                                        Clear
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="primary"
+                                        className="runsheet__calendar-done"
+                                        onClick={handleCalendarDone}
+                                    >
+                                        Done
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
                 <div className="runsheet__actions">
                     <Button 
@@ -326,14 +496,6 @@ Provide dispatch confirmation and field instructions.`
                     >
                         Refresh
                     </Button>
-                    <Button 
-                        variant="secondary" 
-                        icon={optimizing ? <Loader size={16} className="spinner" /> : <Sparkles size={16} />}
-                        onClick={handleOptimizeRunSheets}
-                        disabled={optimizing || reviewedClusters.length === 0}
-                    >
-                        {optimizing ? 'Optimizing...' : 'AI Optimize'}
-                    </Button>
                     <Button variant="ghost" icon={<Download size={16} />}>Export</Button>
                 </div>
             </div>
@@ -341,10 +503,23 @@ Provide dispatch confirmation and field instructions.`
             {/* Overview */}
             <div className="runsheet__overview">
                 <div className="runsheet__summary-strip">
-                    <div className="runsheet__summary-card">
-                        <span>Reviewed clusters</span>
-                        <strong>{reviewedClusters.length}</strong>
-                        <small>{hasReviewedClusters ? 'Ready for planning' : 'Awaiting review'}</small>
+                    <div className="runsheet__summary-card runsheet__summary-card--reviewed">
+                        <div className="runsheet__summary-card-main">
+                            <span>Reviewed clusters</span>
+                            <strong>{reviewedClusters.length}</strong>
+                            <small>{hasReviewedClusters ? 'Ready for planning' : 'Awaiting review'}</small>
+                        </div>
+                        <div className="runsheet__summary-card-action">
+                            <Button
+                                variant="secondary"
+                                className="runsheet__optimize-btn"
+                                icon={optimizing ? <Loader size={16} className="spinner" /> : <Sparkles size={16} />}
+                                onClick={handleOptimizeRunSheets}
+                                disabled={optimizing || reviewedClusters.length === 0}
+                            >
+                                {optimizing ? 'Optimizing...' : 'AI Optimize'}
+                            </Button>
+                        </div>
                     </div>
                     <div className="runsheet__summary-card">
                         <span>Draft run sheets</span>
