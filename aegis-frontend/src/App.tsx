@@ -6,6 +6,7 @@ import Hotspots from './pages/Hotspots'
 import ReviewQueue from './pages/ReviewQueue'
 import RunSheet from './pages/RunSheet'
 import Evidence from './pages/Evidence'
+import Teams from './pages/Teams'
 import TomorrowPlan from './pages/TomorrowPlan'
 import Outcomes from './pages/Outcomes'
 
@@ -18,6 +19,7 @@ function App() {
                 <Route path="hotspots" element={<Hotspots />} />
                 <Route path="review" element={<ReviewQueue />} />
                 <Route path="runsheet" element={<RunSheet />} />
+                <Route path="teams" element={<Teams />} />
                 <Route path="evidence" element={<Evidence />} />
                 <Route path="forecast" element={<TomorrowPlan />} />
                 <Route path="outcomes" element={<Outcomes />} />

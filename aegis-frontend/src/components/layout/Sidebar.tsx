@@ -8,6 +8,7 @@ import {
     Camera,
     CloudSun,
     BarChart3,
+    Users,
     ChevronLeft,
     Shield,
     X,
@@ -40,6 +41,7 @@ const navGroups: { title: string; items: NavItem[] }[] = [
     {
         title: 'Execution',
         items: [
+            { label: 'Teams', icon: <Users size={20} />, href: '/teams' },
             { label: 'Run Sheet', icon: <Calendar size={20} />, href: '/runsheet' },
             { label: 'Evidence', icon: <Camera size={20} />, href: '/evidence' },
         ],

@@ -561,46 +561,9 @@ def create_evidence_record(task_id: str, before_url: str, after_url: str, submit
             'before_image_url': before_url,
             'after_image_url': after_url,
             'submitted_by': submitted_by,
-            'notes': 'Submitted via Telegram',
+            'notes': 'Pending supervisor verification',
         },
     )
-
-    http_request(
-        f"{SUPABASE_URL}/rest/v1/tasks?id=eq.{task_id}",
-        method='PATCH',
-        headers=headers,
-        body={'status': 'VERIFIED'},
-    )
-
-    task_rows = _fetch_json(
-        f"{SUPABASE_URL}/rest/v1/tasks?id=eq.{task_id}&select=cluster_id"
-    )
-    if isinstance(task_rows, list) and task_rows:
-        cluster_id = task_rows[0].get('cluster_id')
-        if cluster_id:
-            http_request(
-                f"{SUPABASE_URL}/rest/v1/clusters?id=eq.{cluster_id}",
-                method='PATCH',
-                headers=headers,
-                body={'state': 'CLOSED'},
-            )
-
-    rst_rows = _fetch_json(
-        f"{SUPABASE_URL}/rest/v1/run_sheet_tasks?task_id=eq.{task_id}&select=run_sheet_id"
-    )
-    if isinstance(rst_rows, list) and rst_rows:
-        for rst in rst_rows:
-            rs_id = rst.get('run_sheet_id')
-            if rs_id:
-                try:
-                    http_request(
-                        f"{SUPABASE_URL}/rest/v1/run_sheets?id=eq.{rs_id}",
-                        method='PATCH',
-                        headers=headers,
-                        body={'status': 'completed'},
-                    )
-                except Exception as exc:
-                    log(f'Error updating run_sheet {rs_id}: {exc}')
 
     return True
 
@@ -614,7 +577,7 @@ def poll_evidence_notifications() -> None:
     encoded_since = urllib.parse.quote(since_iso, safe='')
     url = (
         f"{SUPABASE_URL}/rest/v1/evidence?"
-        f"select=id,task_id,before_image_url,after_image_url,submitted_at,notes"
+        f"select=id,task_id,before_image_url,after_image_url,submitted_at,notes,submitted_by"
         f"&submitted_at=gt.{encoded_since}"
         f"&order=submitted_at.asc"
         f"&limit=10"
@@ -652,7 +615,12 @@ def poll_evidence_notifications() -> None:
         cluster_info = cluster_map.get(task_info.get('cluster_id'), {})
         desc = cluster_info.get('description') or cluster_info.get('location_label') or cluster_info.get('zone_id') or 'Task evidence'
         category = cluster_info.get('category') or 'issue'
-        notes = row.get('notes') or 'Verified'
+        notes = row.get('notes') or ''
+        submitted_by = row.get('submitted_by') or ''
+        is_verified = submitted_by.lower().startswith('supervisor') or 'verified' in notes.lower()
+
+        if not is_verified:
+            continue
 
         # Build recipient list: original complainers + supervisor
         cluster_id = task_info.get('cluster_id')
@@ -677,7 +645,7 @@ def poll_evidence_notifications() -> None:
                 header = (
                     f"✅ *Your reported issue has been resolved!*\n\n"
                     f"Issue: {category} — {desc}\n"
-                    f"Resolution notes: {notes}\n"
+                    f"Resolution notes: {notes or 'Verified'}\n"
                     f"Task reference: `{str(task_id)[:8]}`\n\n"
                     f"Thank you for reporting this!"
                 )
@@ -1050,8 +1018,8 @@ def handle_evidence_photo(chat_id: int, user_id: int, photos: list, message: dic
                 f"✅ *Evidence submitted successfully!*\n\n"
                 f"Task: `{task_id[:8]}` ({task_type})\n"
                 f"Issue: {desc}\n"
-                f"Status: VERIFIED\n\n"
-                "The task has been verified and closed.",
+                f"Status: PENDING REVIEW\n\n"
+                "A supervisor will verify and close the task.",
             )
 
         except Exception as exc:
