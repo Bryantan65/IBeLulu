@@ -117,7 +117,7 @@ export default function RunSheet() {
     }, [calendarMonth])
 
     useEffect(() => {
-        fetchData()
+        fetchData('date-change')
     }, [selectedDate])
 
     useEffect(() => {
@@ -143,16 +143,29 @@ export default function RunSheet() {
         }
     }, [isCalendarOpen])
 
-    const fetchData = async () => {
+    const logOptimize = (message: string, extra?: unknown) => {
+        const ts = new Date().toISOString()
+        if (extra !== undefined) {
+            console.log(`[RunSheet][AI Optimize][${ts}] ${message}`, extra)
+            return
+        }
+        console.log(`[RunSheet][AI Optimize][${ts}] ${message}`)
+    }
+
+    const fetchData = async (source: 'date-change' | 'manual-refresh' | 'optimize' | 'dispatch' = 'date-change') => {
+        const started = performance.now()
         try {
+            logOptimize(`fetchData:start source=${source}`)
             setLoading(true)
             await Promise.all([
                 fetchReviewedClusters(),
                 fetchRunSheets()
             ])
         } catch (error) {
+            logOptimize(`fetchData:error source=${source}`, error)
             console.error('Error fetching data:', error)
         } finally {
+            logOptimize(`fetchData:done source=${source} durationMs=${Math.round(performance.now() - started)}`)
             setLoading(false)
         }
     }
@@ -212,7 +225,9 @@ export default function RunSheet() {
     }
 
     const handleOptimizeRunSheets = async () => {
+        const optimizeStarted = performance.now()
         try {
+            logOptimize('button-clicked')
             setOptimizing(true)
             setAgentResponse('')
 
@@ -220,33 +235,48 @@ export default function RunSheet() {
                 role: 'user',
                 text: `Create optimized run sheets for all pending REVIEWED clusters for ${selectedDate}. Distribute tasks evenly across teams considering their zones and capacity.`
             }
+            logOptimize('message-prepared', message)
 
-            // Add retry logic with exponential backoff
-            let retries = 3
-            let delay = 1000
+            // Keep retries minimal for speed. Retry only transient failures.
+            let retries = 2
             let lastError: any = null
 
             for (let attempt = 0; attempt < retries; attempt++) {
+                const attemptStarted = performance.now()
                 try {
-                    console.log(`Attempt ${attempt + 1} of ${retries}...`)
+                    logOptimize(`attempt=${attempt + 1}/${retries}:sendMessageToAgent:start`, {
+                        agentId: RUNSHEET_PLANNER_AGENT_ID,
+                        selectedDate,
+                    })
                     const response = await sendMessageToAgent([message], RUNSHEET_PLANNER_AGENT_ID)
+                    logOptimize(`attempt=${attempt + 1}/${retries}:sendMessageToAgent:done durationMs=${Math.round(performance.now() - attemptStarted)}`)
                     setAgentResponse(response)
                     
-                    // Refresh data after optimization
-                    await new Promise(resolve => setTimeout(resolve, 2000))
-                    await fetchData()
+                    // Refresh immediately after optimization completes
+                    await fetchData('optimize')
                     setStatusFilter('draft')
                     setActiveView('drafts')
+                    logOptimize(`optimize:success totalDurationMs=${Math.round(performance.now() - optimizeStarted)}`)
                     return // Success, exit function
                 } catch (error: any) {
                     lastError = error
+                    logOptimize(`attempt=${attempt + 1}/${retries}:error`, {
+                        message: error?.message,
+                        stack: error?.stack,
+                    })
                     console.warn(`Attempt ${attempt + 1} failed:`, error.message)
                     
-                    // If this is not the last attempt, wait before retrying
-                    if (attempt < retries - 1) {
-                        console.log(`Retrying in ${delay}ms...`)
-                        await new Promise(resolve => setTimeout(resolve, delay))
-                        delay *= 2 // Exponential backoff
+                    const messageText = String(error?.message || '')
+                    const isTransientError =
+                        /network|timeout|failed to fetch/i.test(messageText) ||
+                        /\b(429|500|502|503|504)\b/.test(messageText)
+
+                    // Retry once only for transient failures.
+                    if (attempt < retries - 1 && isTransientError) {
+                        logOptimize(`attempt=${attempt + 1}/${retries}:transient-retry-wait durationMs=300`)
+                        await new Promise(resolve => setTimeout(resolve, 300))
+                    } else {
+                        break
                     }
                 }
             }
@@ -255,10 +285,15 @@ export default function RunSheet() {
             throw lastError || new Error('All retry attempts failed')
 
         } catch (error: any) {
+            logOptimize('optimize:failed', {
+                message: error?.message || String(error),
+                totalDurationMs: Math.round(performance.now() - optimizeStarted),
+            })
             console.error('Error optimizing run sheets:', error)
             const errorMessage = error?.message || String(error)
             setAgentResponse(`Error: Failed to optimize run sheets after multiple attempts.\n\nError: ${errorMessage}\n\nPlease try again. If the issue persists, check your network connection.`)
         } finally {
+            logOptimize('optimize:finally setOptimizing(false)')
             setOptimizing(false)
         }
     }
@@ -375,7 +410,7 @@ Provide dispatch confirmation and field instructions.`
             }
 
             // Refresh data
-            await fetchData()
+            await fetchData('dispatch')
         } catch (error) {
             console.error('Error dispatching run sheet:', error)
             setDispatchResponse('Error: Failed to dispatch run sheet. Please try again.')
@@ -492,7 +527,7 @@ Provide dispatch confirmation and field instructions.`
                     <Button 
                         variant="ghost" 
                         icon={<RefreshCw size={16} />}
-                        onClick={fetchData}
+                        onClick={() => fetchData('manual-refresh')}
                     >
                         Refresh
                     </Button>

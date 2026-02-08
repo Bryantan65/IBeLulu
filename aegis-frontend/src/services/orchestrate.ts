@@ -1,4 +1,3 @@
-
 // Access environment variables
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -29,15 +28,28 @@ export interface OrchestrateResponse {
 let cachedToken: string | null = null;
 let tokenExpiry: number | null = null;
 
+function logOrchestrate(message: string, extra?: unknown): void {
+    const ts = new Date().toISOString();
+    if (extra !== undefined) {
+        console.log(`[Orchestrate][${ts}] ${message}`, extra);
+        return;
+    }
+    console.log(`[Orchestrate][${ts}] ${message}`);
+}
+
 async function getValidToken(): Promise<string> {
+    const tokenStart = performance.now();
+
     // Check if we have a valid cached token (with 5 minute buffer)
     if (cachedToken && tokenExpiry && Date.now() < (tokenExpiry * 1000 - 300000)) {
+        logOrchestrate(`getValidToken:cache-hit durationMs=${Math.round(performance.now() - tokenStart)}`);
         return cachedToken;
     }
 
-    console.log("🔄 Fetching new IBM JWT token from Edge Function...");
+    logOrchestrate('getValidToken:cache-miss fetching-new-token');
 
     try {
+        const requestStart = performance.now();
         const response = await fetch(`${SUPABASE_URL}/functions/v1/watson-token`, {
             method: 'POST',
             headers: {
@@ -45,6 +57,7 @@ async function getValidToken(): Promise<string> {
                 'Content-Type': 'application/json'
             }
         });
+        logOrchestrate(`getValidToken:token-endpoint-response status=${response.status} durationMs=${Math.round(performance.now() - requestStart)}`);
 
         if (!response.ok) {
             const text = await response.text();
@@ -56,11 +69,15 @@ async function getValidToken(): Promise<string> {
         cachedToken = data.token;
         tokenExpiry = data.expires_at;
 
-        console.log("✅ New token received, expires at:", new Date(data.expires_at * 1000).toLocaleString());
+        logOrchestrate('getValidToken:success', {
+            expiresAtEpoch: data.expires_at,
+            totalDurationMs: Math.round(performance.now() - tokenStart),
+        });
         return cachedToken as string;
 
     } catch (error) {
-        console.error("Critical: Failed to get IBM token", error);
+        logOrchestrate('getValidToken:error', error);
+        console.error('Critical: Failed to get IBM token', error);
         throw error;
     }
 }
@@ -75,7 +92,16 @@ export async function sendMessageToAgent(history: ChatMessage[], agentId?: strin
     const URL = `/api/orchestrate/instances/${INSTANCE_ID}/v1/orchestrate/${TARGET_AGENT_ID}/chat/completions`;
 
     try {
+        const overallStart = performance.now();
+        logOrchestrate('sendMessageToAgent:start', {
+            agentId: TARGET_AGENT_ID,
+            historyLength: history.length,
+            url: URL,
+        });
+
+        const tokenStart = performance.now();
         const token = await getValidToken();
+        logOrchestrate(`sendMessageToAgent:token-ready durationMs=${Math.round(performance.now() - tokenStart)}`);
 
         // Use the format provided by the user in the CURL request:
         // "content": [ { "response_type": "text", "text": "..." } ]
@@ -86,6 +112,11 @@ export async function sendMessageToAgent(history: ChatMessage[], agentId?: strin
             ]
         }));
 
+        const requestStart = performance.now();
+        logOrchestrate('sendMessageToAgent:request:start', {
+            stream: false,
+            messageCount: apiMessages.length,
+        });
         const response = await fetch(URL, {
             method: 'POST',
             headers: {
@@ -98,14 +129,19 @@ export async function sendMessageToAgent(history: ChatMessage[], agentId?: strin
                 messages: apiMessages
             })
         });
+        logOrchestrate(`sendMessageToAgent:request:done status=${response.status} durationMs=${Math.round(performance.now() - requestStart)}`);
 
         if (!response.ok) {
             // If 401, maybe token expired just now? Retry once.
             if (response.status === 401) {
-                console.warn("⚠️ Received 401, retrying with fresh token...");
+                logOrchestrate('sendMessageToAgent:401 retrying-with-fresh-token');
                 cachedToken = null; // Force refresh
-                const newToken = await getValidToken();
 
+                const retryTokenStart = performance.now();
+                const newToken = await getValidToken();
+                logOrchestrate(`sendMessageToAgent:retry-token-ready durationMs=${Math.round(performance.now() - retryTokenStart)}`);
+
+                const retryRequestStart = performance.now();
                 const retryResponse = await fetch(URL, {
                     method: 'POST',
                     headers: {
@@ -118,29 +154,41 @@ export async function sendMessageToAgent(history: ChatMessage[], agentId?: strin
                         messages: apiMessages
                     })
                 });
+                logOrchestrate(`sendMessageToAgent:retry-request:done status=${retryResponse.status} durationMs=${Math.round(performance.now() - retryRequestStart)}`);
 
                 if (!retryResponse.ok) {
                     const errorText = await retryResponse.text();
                     throw new Error(`API Request failed after retry: ${retryResponse.status} ${retryResponse.statusText} - ${errorText}`);
                 }
 
-                return await parseResponse(retryResponse);
+                const parseStart = performance.now();
+                const parsedRetry = await parseResponse(retryResponse);
+                logOrchestrate(`sendMessageToAgent:retry-parse:done durationMs=${Math.round(performance.now() - parseStart)}`);
+                logOrchestrate(`sendMessageToAgent:success totalDurationMs=${Math.round(performance.now() - overallStart)}`);
+                return parsedRetry;
             }
 
             const errorText = await response.text();
             throw new Error(`API Request failed: ${response.status} ${response.statusText} - ${errorText}`);
         }
 
-        return await parseResponse(response);
+        const parseStart = performance.now();
+        const parsed = await parseResponse(response);
+        logOrchestrate(`sendMessageToAgent:parse:done durationMs=${Math.round(performance.now() - parseStart)}`);
+        logOrchestrate(`sendMessageToAgent:success totalDurationMs=${Math.round(performance.now() - overallStart)}`);
+        return parsed;
 
     } catch (error) {
-        console.error("Error calling Watson Orchestrate:", error);
+        logOrchestrate('sendMessageToAgent:error', error);
+        console.error('Error calling Watson Orchestrate:', error);
         throw error;
     }
 }
 
 async function parseResponse(response: Response): Promise<string> {
+    const parseStart = performance.now();
     const data: OrchestrateResponse = await response.json();
+    logOrchestrate(`parseResponse:json-decoded durationMs=${Math.round(performance.now() - parseStart)}`);
 
     // Extract the assistant's response from choices[0].message.content
     if (data.choices && data.choices.length > 0) {
@@ -150,5 +198,5 @@ async function parseResponse(response: Response): Promise<string> {
         }
     }
 
-    return "No response text received from agent.";
+    return 'No response text received from agent.';
 }
