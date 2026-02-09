@@ -1,0 +1,188 @@
+openapi: 3.0.0
+info:
+  title: Google Maps Location API
+  description: API for resolving landmarks, addresses, and place names to official Singapore addresses using Google Maps. Used by the Complaints Agent to normalize location_text into real, dispatchable addresses.
+  version: 1.0.0
+servers:
+  - url: https://maps.googleapis.com/maps/api
+    description: Google Maps Platform API
+
+paths:
+  /geocode/json:
+    get:
+      operationId: geocode_address
+      summary: Geocode an address or landmark to a structured Singapore address
+      description: >
+        Converts a human-readable address, block number, or landmark name into a
+        structured address with postal code and coordinates. Use this to validate
+        and normalize location_text before submitting a complaint. Always include
+        components=country:SG to restrict results to Singapore.
+      parameters:
+        - name: address
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The address, landmark, or place name to geocode
+          example: "NTU ARC Building"
+        - name: components
+          in: query
+          required: true
+          schema:
+            type: string
+            default: "country:SG"
+          description: Restrict results to Singapore (must be country:SG)
+        - name: key
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Google Maps API key
+      responses:
+        '200':
+          description: Geocoding results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    description: Status of the geocoding request (OK, ZERO_RESULTS, INVALID_REQUEST, etc.)
+                    example: "OK"
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        formatted_address:
+                          type: string
+                          description: Full formatted Singapore address
+                          example: "50 Nanyang Ave, Singapore 639798"
+                        geometry:
+                          type: object
+                          properties:
+                            location:
+                              type: object
+                              properties:
+                                lat:
+                                  type: number
+                                  description: Latitude
+                                  example: 1.3483
+                                lng:
+                                  type: number
+                                  description: Longitude
+                                  example: 103.6831
+                        address_components:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              long_name:
+                                type: string
+                              short_name:
+                                type: string
+                              types:
+                                type: array
+                                items:
+                                  type: string
+                        place_id:
+                          type: string
+                          description: Unique Google Place ID for this location
+        '400':
+          description: Invalid request
+        '403':
+          description: API key invalid or quota exceeded
+
+  /place/textsearch/json:
+    get:
+      operationId: search_place
+      summary: Search for a place by name or description in Singapore
+      description: >
+        Searches for places matching a text query within Singapore. Use this when
+        the user provides a landmark name, building name, or vague description
+        (e.g. "Yishun MRT", "Tampines Hub") and you need to resolve it to an
+        official address. Returns multiple results ranked by relevance.
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The place name or landmark to search for
+          example: "Tampines Hub Singapore"
+        - name: region
+          in: query
+          required: true
+          schema:
+            type: string
+            default: "sg"
+          description: Bias results to Singapore (must be sg)
+        - name: key
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Google Maps API key
+      responses:
+        '200':
+          description: Place search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    description: Status of the search request (OK, ZERO_RESULTS, INVALID_REQUEST, etc.)
+                    example: "OK"
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                          description: Name of the place
+                          example: "Our Tampines Hub"
+                        formatted_address:
+                          type: string
+                          description: Full formatted Singapore address
+                          example: "1 Tampines Walk, Singapore 528523"
+                        geometry:
+                          type: object
+                          properties:
+                            location:
+                              type: object
+                              properties:
+                                lat:
+                                  type: number
+                                  description: Latitude
+                                  example: 1.3525
+                                lng:
+                                  type: number
+                                  description: Longitude
+                                  example: 103.9396
+                        place_id:
+                          type: string
+                          description: Unique Google Place ID
+                        types:
+                          type: array
+                          items:
+                            type: string
+                          description: Place type tags
+        '400':
+          description: Invalid request
+        '403':
+          description: API key invalid or quota exceeded
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: query
+      name: key
+      description: Google Maps Platform API key
+
+security:
+  - ApiKeyAuth: []
