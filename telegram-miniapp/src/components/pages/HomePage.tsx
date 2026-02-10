@@ -17,8 +17,8 @@ export default function HomePage() {
   return (
     <div className="home">
       <div className="home__header">
-        <div className="home__logo">&#x1F3D8;</div>
-        <h1 className="home__title">Lulu Town Council</h1>
+        <img src="/aegislogo.jpg" alt="AEGIS Logo" className="home__logo-img" />
+        <h1 className="home__title">AEGIS Complaint</h1>
         {userName && (
           <p className="home__greeting">Hello, {userName}!</p>
         )}

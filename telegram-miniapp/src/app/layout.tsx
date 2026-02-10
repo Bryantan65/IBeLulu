@@ -10,8 +10,8 @@ const TelegramInit = dynamic(() => import('@/components/TelegramInit'), {
 })
 
 export const metadata: Metadata = {
-  title: 'Lulu Town Council',
-  description: 'Telegram Mini App for Lulu Town Council',
+  title: 'AEGIS Complaint',
+  description: 'Telegram Mini App for AEGIS Complaint',
 }
 
 export default function RootLayout({

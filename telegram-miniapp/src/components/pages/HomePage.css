@@ -10,9 +10,12 @@
   padding: var(--space-8) 0 var(--space-6);
 }
 
-.home__logo {
-  font-size: 48px;
+.home__logo-img {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
   margin-bottom: var(--space-3);
+  border-radius: var(--radius-md);
 }
 
 .home__title {

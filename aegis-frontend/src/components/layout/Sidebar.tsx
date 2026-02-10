@@ -10,7 +10,6 @@ import {
     BarChart3,
     Users,
     ChevronLeft,
-    Shield,
     X,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
@@ -96,7 +95,7 @@ export default function Sidebar({ mobileMenuOpen = false, onMobileMenuClose }: S
             <aside className={`sidebar ${collapsed ? 'sidebar--collapsed' : ''} ${mobileMenuOpen ? 'sidebar--mobile-open' : ''}`}>
                 <div className="sidebar__header">
                     <div className="sidebar__logo">
-                        <Shield size={28} className="sidebar__logo-icon" />
+                        <img src="/aegislogo.jpg" alt="AEGIS Logo" className="sidebar__logo-icon" style={{ width: '61px', height: '61px' }} />
                         {!collapsed && <span className="sidebar__brand">AEGIS</span>}
                     </div>
                     <button
