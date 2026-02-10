@@ -1,0 +1,100 @@
+.home {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: var(--space-6);
+}
+
+.home__header {
+  text-align: center;
+  padding: var(--space-8) 0 var(--space-6);
+}
+
+.home__logo {
+  font-size: 48px;
+  margin-bottom: var(--space-3);
+}
+
+.home__title {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--text-color);
+  margin-bottom: var(--space-2);
+}
+
+.home__greeting {
+  font-size: var(--text-lg);
+  color: var(--text-color);
+  margin-bottom: var(--space-1);
+}
+
+.home__subtitle {
+  font-size: var(--text-sm);
+  color: var(--hint-color);
+}
+
+.home__cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  flex: 1;
+}
+
+.home__card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--secondary-bg);
+  border-radius: var(--radius-md);
+  text-align: left;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.home__card:active {
+  transform: scale(0.98);
+}
+
+.home__card-icon {
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.home__card-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.home__card-title {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.home__card-desc {
+  font-size: var(--text-sm);
+  color: var(--hint-color);
+}
+
+.home__card-arrow {
+  font-size: 24px;
+  color: var(--hint-color);
+  flex-shrink: 0;
+}
+
+.home__footer {
+  padding: var(--space-6) 0;
+  text-align: center;
+}
+
+.home__emergency {
+  font-size: var(--text-sm);
+  color: var(--hint-color);
+}
+
+.home__emergency strong {
+  color: var(--link-color);
+}
