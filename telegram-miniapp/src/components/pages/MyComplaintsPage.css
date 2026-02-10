@@ -5,6 +5,11 @@
   gap: var(--space-4);
 }
 
+.my-complaints__topbar {
+  display: flex;
+  align-items: center;
+}
+
 .my-complaints__title {
   font-size: var(--text-xl);
   font-weight: 700;

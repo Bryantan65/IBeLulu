@@ -8,8 +8,10 @@ export async function apiFetch<T>(
     body?: Record<string, unknown>
   } = {}
 ): Promise<T> {
+  // Prefer Telegram WebApp.initData (available immediately via beforeInteractive script)
+  // Fall back to localStorage (set by TelegramInit component, may not be ready on first render)
   const token = typeof window !== 'undefined'
-    ? localStorage.getItem('tg_init_data')
+    ? (window.Telegram?.WebApp?.initData || localStorage.getItem('tg_init_data'))
     : null
 
   const headers: Record<string, string> = {

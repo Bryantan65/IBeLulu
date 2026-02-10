@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import {
   backButton,
   closingBehavior,
@@ -11,6 +12,7 @@ import {
 
 export default function TelegramInit() {
   const rawInitData = useRawInitData()
+  const pathname = usePathname()
 
   // Save rawInitData to localStorage for auth headers
   useEffect(() => {
@@ -22,6 +24,8 @@ export default function TelegramInit() {
 
   // Initialize SDK, back button, mini app, closing behavior
   useEffect(() => {
+    let offBackButtonClick: VoidFunction | undefined
+
     try {
       init()
       console.log('[TelegramInit] SDK initialized')
@@ -29,10 +33,9 @@ export default function TelegramInit() {
       // Mount and handle back button
       if (backButton.mount.isAvailable()) {
         backButton.mount()
-        backButton.onClick(() => {
-          if (backButton.isMounted()) {
-            backButton.hide()
-          }
+      }
+      if (backButton.onClick.isAvailable()) {
+        offBackButtonClick = backButton.onClick(() => {
           window.history.back()
         })
       }
@@ -57,11 +60,27 @@ export default function TelegramInit() {
     }
 
     return () => {
+      offBackButtonClick?.()
       if (backButton.isMounted()) {
         backButton.unmount()
       }
     }
   }, [])
+
+  useEffect(() => {
+    if (!backButton.isMounted()) return
+
+    if (pathname === '/') {
+      if (backButton.hide.isAvailable()) {
+        backButton.hide()
+      }
+      return
+    }
+
+    if (backButton.show.isAvailable()) {
+      backButton.show()
+    }
+  }, [pathname])
 
   return null
 }

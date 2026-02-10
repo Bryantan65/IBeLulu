@@ -1,133 +1,195 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { getMainButton } from '@/lib/telegram'
 import { apiFetch } from '@/lib/api'
-import type { Complaint } from '@/types/complaint'
 import './SubmitComplaintPage.css'
 
-const CATEGORIES = [
-  { value: 'bin_overflow', label: 'Bin Overflow' },
-  { value: 'litter', label: 'Litter' },
-  { value: 'blocked_drain', label: 'Blocked Drain' },
-  { value: 'pest_control', label: 'Pest Control' },
-  { value: 'general_cleanliness', label: 'General Cleanliness' },
-  { value: 'other', label: 'Other' },
-]
+interface ChatMessage {
+  role: 'user' | 'assistant'
+  text: string
+}
+
+interface ChatResponse {
+  status: 'followup' | 'complete'
+  reply: string
+  history: ChatMessage[]
+  complaint?: { id: string } | null
+}
+
+const GREETING = "Hi! Please describe your issue, including the location if possible. For example: \"Overflowing bin at Block 123, Yishun Ave 1.\""
 
 export default function SubmitComplaintPage() {
   const router = useRouter()
-  const [text, setText] = useState('')
-  const [location, setLocation] = useState('')
-  const [category, setCategory] = useState('general_cleanliness')
-  const [submitting, setSubmitting] = useState(false)
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { role: 'assistant', text: GREETING },
+  ])
+  const [history, setHistory] = useState<ChatMessage[]>([])
+  const [input, setInput] = useState('')
+  const [sending, setSending] = useState(false)
+  const [complaintId, setComplaintId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-
-  const isValid = text.trim().length > 10 && location.trim().length > 3
-
-  const handleSubmit = useCallback(async () => {
-    if (!isValid || submitting) return
-
-    setSubmitting(true)
-    setError(null)
-    getMainButton()?.showProgress(true)
-
-    try {
-      // User identity comes from the validated initData on the server side
-      const complaint = await apiFetch<Complaint>('/api/complaints', {
-        method: 'POST',
-        body: {
-          text: text.trim(),
-          location_label: location.trim(),
-          category_pred: category,
-        },
-      })
-
-      getMainButton()?.hideProgress()
-      getMainButton()?.hide()
-      router.push(`/complaints/${complaint.id}?justSubmitted=true`)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Submission failed. Please try again.')
-      getMainButton()?.hideProgress()
-      setSubmitting(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      router.back()
+      return
     }
-  }, [isValid, submitting, text, location, category, router])
+    router.push('/')
+  }
 
+  // Auto-scroll to bottom when messages update
   useEffect(() => {
-    const btn = getMainButton()
-    if (!btn) return
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
 
-    if (isValid && !submitting) {
-      btn.setText('Submit Complaint')
-      btn.show()
-      btn.enable()
-      btn.onClick(handleSubmit)
-    } else if (!isValid) {
-      btn.hide()
-    }
-
-    return () => {
-      btn.offClick(handleSubmit)
-    }
-  }, [isValid, submitting, handleSubmit])
-
+  // Focus input on mount
   useEffect(() => {
-    return () => {
-      getMainButton()?.hide()
-    }
+    inputRef.current?.focus()
   }, [])
 
+  const handleSend = useCallback(async () => {
+    const text = input.trim()
+    if (!text || sending || complaintId) return
+
+    setInput('')
+    setError(null)
+    setSending(true)
+
+    // Add user message to display immediately
+    const userMsg: ChatMessage = { role: 'user', text }
+    setMessages((prev) => [...prev, userMsg])
+
+    try {
+      const res = await apiFetch<ChatResponse>('/api/complaints/chat', {
+        method: 'POST',
+        body: { message: text, history },
+      })
+
+      // Add assistant reply
+      const assistantMsg: ChatMessage = { role: 'assistant', text: res.reply }
+      setMessages((prev) => [...prev, assistantMsg])
+      setHistory(res.history)
+
+      if (res.status === 'complete') {
+        if (res.complaint?.id) {
+          setComplaintId(res.complaint.id)
+        } else {
+          // Agent confirmed but linking may have failed — still show success
+          setComplaintId('submitted')
+        }
+      }
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'Something went wrong'
+      setError(errMsg)
+      // Remove the user message if request failed entirely
+      setMessages((prev) => prev.slice(0, -1))
+      setInput(text) // restore input
+    } finally {
+      setSending(false)
+      inputRef.current?.focus()
+    }
+  }, [input, sending, complaintId, history])
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
+
   return (
-    <div className="submit">
-      <h2 className="submit__title">Report an Issue</h2>
-      <p className="submit__hint">Please provide details so we can address it quickly.</p>
-
-      {error && <div className="submit__error">{error}</div>}
-
-      <div className="submit__field">
-        <label className="submit__label">What is the problem? *</label>
-        <textarea
-          className="submit__textarea"
-          placeholder="Describe the issue in detail... (e.g., 'Overflowing bin at the corner of Block 123')"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={4}
-          disabled={submitting}
-        />
-        <span className="submit__char-count">
-          {text.trim().length < 11 ? `${11 - text.trim().length} more characters needed` : ''}
-        </span>
-      </div>
-
-      <div className="submit__field">
-        <label className="submit__label">Location *</label>
-        <input
-          className="submit__input"
-          type="text"
-          placeholder="e.g., Block 123, Yishun Avenue 1"
-          value={location}
-          onChange={(e) => setLocation(e.target.value)}
-          disabled={submitting}
-        />
-      </div>
-
-      <div className="submit__field">
-        <label className="submit__label">Category</label>
-        <div className="submit__chips">
-          {CATEGORIES.map((cat) => (
-            <button
-              key={cat.value}
-              className={`submit__chip ${category === cat.value ? 'submit__chip--active' : ''}`}
-              onClick={() => setCategory(cat.value)}
-              disabled={submitting}
-              type="button"
-            >
-              {cat.label}
-            </button>
-          ))}
+    <div className="chat">
+      <div className="chat__header">
+        <div className="chat__topbar">
+          <button className="page-back-btn" onClick={handleBack}>
+            <span className="page-back-btn__icon">{'<'}</span>
+            Back
+          </button>
         </div>
+        <h2 className="chat__title">Report an Issue</h2>
+        <p className="chat__hint">Chat with our AI assistant to submit your complaint.</p>
       </div>
+
+      <div className="chat__messages">
+        {messages.map((msg, i) => (
+          <div
+            key={i}
+            className={`chat__bubble ${
+              msg.role === 'user' ? 'chat__bubble--user' : 'chat__bubble--assistant'
+            }`}
+          >
+            {msg.role === 'assistant' && (
+              <span className="chat__avatar">🏛️</span>
+            )}
+            <div className="chat__bubble-content">
+              <p className="chat__bubble-text">{msg.text}</p>
+            </div>
+          </div>
+        ))}
+
+        {sending && (
+          <div className="chat__bubble chat__bubble--assistant">
+            <span className="chat__avatar">🏛️</span>
+            <div className="chat__bubble-content">
+              <div className="chat__typing">
+                <span></span><span></span><span></span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {complaintId && (
+          <div className="chat__success-card">
+            <span className="chat__success-icon">✅</span>
+            <p className="chat__success-text">Complaint submitted successfully!</p>
+            {complaintId !== 'submitted' && (
+              <button
+                className="chat__view-btn"
+                onClick={() => router.push(`/complaints/${complaintId}?justSubmitted=true`)}
+              >
+                View Complaint Details
+              </button>
+            )}
+            <button
+              className="chat__home-btn"
+              onClick={() => router.push('/')}
+            >
+              Back to Home
+            </button>
+          </div>
+        )}
+
+        <div ref={messagesEndRef} />
+      </div>
+
+      {error && <div className="chat__error">{error}</div>}
+
+      {!complaintId && (
+        <div className="chat__input-bar">
+          <textarea
+            ref={inputRef}
+            className="chat__input"
+            placeholder="Describe your issue..."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            rows={1}
+            disabled={sending}
+          />
+          <button
+            className="chat__send-btn"
+            onClick={handleSend}
+            disabled={!input.trim() || sending}
+            aria-label="Send"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="currentColor" />
+            </svg>
+          </button>
+        </div>
+      )}
     </div>
   )
 }

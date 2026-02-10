@@ -41,6 +41,7 @@ DISPATCH_POLL_INTERVAL = int(os.environ.get('DISPATCH_POLL_INTERVAL', '15'))
 DISPATCH_TELEGRAM_USER_ID = os.environ.get('DISPATCH_TELEGRAM_USER_ID', '297484629').strip()
 DISPATCH_MEDIA_TELEGRAM_USER_ID = os.environ.get('DISPATCH_MEDIA_TELEGRAM_USER_ID', '836447627').strip()
 DISPATCH_LOOKBACK_SECONDS = int(os.environ.get('DISPATCH_LOOKBACK_SECONDS', '3600'))
+TELEGRAM_MINIAPP_URL = os.environ.get('TELEGRAM_MINIAPP_URL', '').strip()
 
 TOKEN_ENDPOINT = f"{SUPABASE_URL}/functions/v1/watson-token" if SUPABASE_URL else ''
 
@@ -53,6 +54,8 @@ last_dispatch_poll: float = 0.0
 sent_dispatch_ids: Set[str] = set()
 last_evidence_check: int = int(time.time()) - DISPATCH_LOOKBACK_SECONDS
 sent_evidence_ids: Set[str] = set()
+last_resolution_check: int = int(time.time()) - DISPATCH_LOOKBACK_SECONDS
+sent_resolution_ids: Set[str] = set()
 evidence_sessions: Dict[int, dict] = {}
 complaint_active: Set[int] = set()  # user_ids currently in complaint mode
 
@@ -770,6 +773,85 @@ def poll_dispatch_notifications() -> None:
                 last_dispatch_check = int(time.time())
 
 
+def poll_resolution_notifications() -> None:
+    """Notify users via Telegram when their complaint is resolved (VERIFIED/CLOSED).
+    Sends a message directing them to the mini app for details and photos."""
+    global last_resolution_check
+    if not SUPABASE_URL or not SUPABASE_API_KEY:
+        return
+
+    since_iso = datetime.fromtimestamp(last_resolution_check, tz=timezone.utc).isoformat()
+    encoded_since = urllib.parse.quote(since_iso, safe='')
+
+    # Find recently resolved complaints that have a telegram_user_id
+    url = (
+        f"{SUPABASE_URL}/rest/v1/complaints?"
+        f"select=id,text,category_pred,location_label,status,telegram_user_id"
+        f"&status=in.(VERIFIED,CLOSED)"
+        f"&telegram_user_id=not.is.null"
+        f"&created_at=gt.{encoded_since}"
+        f"&order=created_at.asc"
+        f"&limit=20"
+    )
+
+    try:
+        response = http_request(
+            url,
+            method='GET',
+            headers={
+                'apikey': SUPABASE_API_KEY,
+                'Authorization': f'Bearer {SUPABASE_API_KEY}',
+            },
+        )
+    except Exception as exc:
+        log(f'Error polling resolution notifications: {exc}')
+        return
+
+    if not isinstance(response, list) or not response:
+        return
+
+    for row in response:
+        complaint_id = row.get('id')
+        if not complaint_id or complaint_id in sent_resolution_ids:
+            continue
+
+        uid_str = row.get('telegram_user_id')
+        if not uid_str or uid_str == 'anonymous':
+            continue
+
+        try:
+            chat_id = int(uid_str)
+        except (ValueError, TypeError):
+            continue
+
+        category = row.get('category_pred') or 'issue'
+        location = row.get('location_label') or 'your area'
+
+        miniapp_link = ''
+        if TELEGRAM_MINIAPP_URL:
+            miniapp_link = f"\n\n📱 View details & resolution photos:\n{TELEGRAM_MINIAPP_URL}/complaints/{complaint_id}"
+
+        message = (
+            f"✅ *Your complaint has been resolved!*\n\n"
+            f"📂 Category: {category}\n"
+            f"📍 Location: {location}\n"
+            f"🆔 ID: `{str(complaint_id)[:8]}`"
+            f"{miniapp_link}\n\n"
+            f"Thank you for reporting this! 🌟"
+        )
+
+        try:
+            send_telegram_message(chat_id, message)
+            log(f'Resolution notification sent to user {uid_str} for complaint {complaint_id[:8]}')
+        except Exception as exc:
+            log(f'Failed to send resolution notification to {uid_str}: {exc}')
+
+        sent_resolution_ids.add(complaint_id)
+
+    # Update watermark
+    last_resolution_check = int(time.time())
+
+
 def link_telegram_to_complaint(telegram_user_id: int, telegram_username: Optional[str]) -> Optional[str]:
     """Find the complaint the Watson agent just created and link the Telegram user to it."""
     if not SUPABASE_URL or not SUPABASE_API_KEY:
@@ -1301,6 +1383,7 @@ def main() -> None:
             if now - last_dispatch_poll > DISPATCH_POLL_INTERVAL:
                 poll_dispatch_notifications()
                 poll_evidence_notifications()
+                poll_resolution_notifications()
                 last_dispatch_poll = now
                 # Clean up stale evidence sessions (older than 10 minutes)
                 stale = [uid for uid, s in evidence_sessions.items() if now - s.get('started_at', 0) > 600]

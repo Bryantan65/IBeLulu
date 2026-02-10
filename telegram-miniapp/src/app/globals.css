@@ -107,3 +107,25 @@ select {
   font-size: 48px;
   opacity: 0.5;
 }
+
+.page-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  margin-left: calc(-1 * var(--space-3));
+  border-radius: var(--radius-full);
+  color: var(--link-color);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.page-back-btn:active {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.page-back-btn__icon {
+  font-family: monospace;
+  font-size: var(--text-base);
+  line-height: 1;
+}

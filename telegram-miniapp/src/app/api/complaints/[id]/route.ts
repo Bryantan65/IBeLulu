@@ -1,8 +1,8 @@
 // BFF API Route: GET /api/complaints/[id]
-// When Supabase is reconnected, this will query Supabase server-side.
+// Queries Supabase server-side.
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getComplaintById } from '@/lib/mock-data'
+import { supabase } from '@/lib/supabase'
 import { validateInitData } from '@/lib/auth'
 
 export async function GET(
@@ -14,11 +14,21 @@ export async function GET(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const complaint = getComplaintById(params.id)
+  const { data, error } = await supabase()
+    .from('complaints')
+    .select('id,text,location_label,category_pred,severity_pred,urgency_pred,confidence,status,created_at,cluster_id,telegram_user_id,telegram_username,photo_url')
+    .eq('id', params.id)
+    .single()
 
-  if (!complaint) {
+  if (error || !data) {
     return NextResponse.json({ error: 'Complaint not found' }, { status: 404 })
   }
 
-  return NextResponse.json(complaint)
+  // Security: only allow the owner to view their complaint
+  const userId = auth.user?.id?.toString()
+  if (userId && data.telegram_user_id && data.telegram_user_id !== userId) {
+    return NextResponse.json({ error: 'Complaint not found' }, { status: 404 })
+  }
+
+  return NextResponse.json(data)
 }

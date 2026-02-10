@@ -26,6 +26,13 @@ export default function MyComplaintsPage() {
   const [complaints, setComplaints] = useState<Complaint[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      router.back()
+      return
+    }
+    router.push('/')
+  }
 
   useEffect(() => {
     apiFetch<Complaint[]>('/api/complaints')
@@ -39,6 +46,12 @@ export default function MyComplaintsPage() {
 
   return (
     <div className="my-complaints">
+      <div className="my-complaints__topbar">
+        <button className="page-back-btn" onClick={handleBack}>
+          <span className="page-back-btn__icon">{'<'}</span>
+          Back
+        </button>
+      </div>
       <h2 className="my-complaints__title">My Complaints</h2>
 
       {complaints.length === 0 ? (

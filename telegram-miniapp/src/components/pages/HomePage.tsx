@@ -1,20 +1,26 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { getTelegramUser } from '@/lib/telegram'
 import './HomePage.css'
 
 export default function HomePage() {
   const router = useRouter()
-  const user = getTelegramUser()
+  const [userName, setUserName] = useState<string | null>(null)
+
+  useEffect(() => {
+    const user = getTelegramUser()
+    if (user?.first_name) setUserName(user.first_name)
+  }, [])
 
   return (
     <div className="home">
       <div className="home__header">
         <div className="home__logo">&#x1F3D8;</div>
         <h1 className="home__title">Lulu Town Council</h1>
-        {user && (
-          <p className="home__greeting">Hello, {user.first_name}!</p>
+        {userName && (
+          <p className="home__greeting">Hello, {userName}!</p>
         )}
         <p className="home__subtitle">How can we help you today?</p>
       </div>
