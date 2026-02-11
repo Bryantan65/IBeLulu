@@ -1,0 +1,90 @@
+openapi: 3.0.0
+info:
+  title: Town Council Complaints API
+  description: API for submitting and managing town council complaints
+  version: 1.0.0
+servers:
+  - url: https://gsbpchneovtpqgnyfttp.supabase.co/functions/v1
+    description: Supabase Edge Functions
+
+paths:
+  /submit-complaint:
+    post:
+      operationId: submit_complaint
+      summary: Submit a new complaint
+      description: Submit a complaint about town council issues (bin overflow, litter, blocked drains, etc.)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - text
+                - location_text
+              properties:
+                text:
+                  type: string
+                  description: Description of the complaint
+                  example: "Bin overflow at Block 123"
+                location_text:
+                  type: string
+                  description: Location of the issue (human-readable)
+                  example: "Block 123, Yishun Avenue 1"
+                category:
+                  type: string
+                  description: Category of complaint
+                  enum:
+                    - litter
+                    - overflow
+                    - smell
+                    - cleaning
+                    - blocked_drain
+                    - pest
+                    - walkway_cleanliness
+                    - lighting
+                    - noise
+                    - other
+                  example: "overflow"
+                severity:
+                  type: integer
+                  description: Severity level (1-5)
+                  minimum: 1
+                  maximum: 5
+                  example: 3
+                urgency:
+                  type: string
+                  description: Urgency level
+                  enum:
+                    - today
+                    - 48h
+                    - week
+                  example: "today"
+      responses:
+        '200':
+          description: Complaint submitted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  complaint_id:
+                    type: string
+                  message:
+                    type: string
+        '400':
+          description: Bad request
+        '500':
+          description: Server error
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - BearerAuth: []

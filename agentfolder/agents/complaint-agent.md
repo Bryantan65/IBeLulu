@@ -62,18 +62,65 @@ Format location_text as: `<Building/Block>, <Street Name>, Singapore <POSTAL>`
 Must include 6-digit Singapore postal code. Do NOT include level/unit (put in notes).
 
 === CATEGORIES ===
-litter | overflow | smell | cleaning | blocked_drain | pest | walkway_cleanliness | lighting | noise | other
+Illegal Parking Roads | illegal parking HDB carpark | Motorcycle at void deck | Lighting maintenance | common area maintenance | HDB car park maintenance | Playgrounds or fitness facilities maintenance | bulky waste in common areas | dirty public areas | overflowing litter bins | high-rise littering | Damaged road signs | faulty streetlights | covered linkway maintenance | road maintenance | footpath maintenance | choked drains or stagnant water | damaged drains | flooding | sewer choke or overflow | sewage smell | dead animals | injured animals | bird issues | cat issues | dog issues | other animal issues | cockroachs in food establishments | mosquitoes | rodents in common areas | rodents in food establishments | bees and hornets | fallen trees or tree branches | overgrown grass | park lighting maintenance | park facilties maintenance | other parks and greenery issues | smoking (food premises) | smoking (parks and park connections) | smoking (other public area) | construction noise | abandoned trolley | abandoned bicycle | no water | water leakages | water pressure | water quality | others
 
-litter: loose trash, bottles, wrappers, bulky items
-overflow: bin centre full/overflowing, refuse chute issues
-smell: persistent odour (urine/refuse/rotting)
-cleaning: spills/stains/soiling
-walkway_cleanliness: corridor/footpath hygiene, slippery algae, mud
-blocked_drain: ponding water, clogged drains, flooding risk
-pest: rats/cockroaches/wasps/strays, droppings, carcass
-lighting: faulty/blinking/off lights
-noise: loud music/renovation/late-night disturbance
-other: anything that doesn't fit above (including fire, security issues)
+Illegal Parking Roads: vehicles illegally parked on public roads, blocking lanes/driveways, causing obstruction
+illegal parking HDB carpark: illegal/stubborn parking within HDB carparks (wrong lots, blocking access, double parking)
+Motorcycle at void deck: motorcycles parked/ridden at void deck or sheltered common areas where not allowed
+
+Lighting maintenance: corridor/stairwell/common-area lights off, flickering, dim, exposed wiring, lighting safety concerns
+faulty streetlights: streetlights along roads/streets not working, flickering, dim, damaged lamp posts
+park lighting maintenance: park/PCN lighting not working, flickering, dim, damaged fixtures
+
+common area maintenance: general defects in common areas (walls, railings, ceilings, tiles, loose fixtures, lifts/landings)
+HDB car park maintenance: carpark defects (potholes, cracks, broken kerbs, poor line markings, damaged barriers/gantries)
+Playgrounds or fitness facilities maintenance: damaged play structures/gym equipment, loose bolts, broken surfaces, unsafe areas
+covered linkway maintenance: sheltered linkway defects (leaks, broken panels, slippery surfaces, damaged flooring/roofing)
+road maintenance: potholes, uneven road surfaces, cracks, sunken areas, road hazards
+footpath maintenance: uneven/broken footpath tiles, trip hazards, loose pavers, damaged kerbs
+
+bulky waste in common areas: discarded bulky items (furniture, mattresses, appliances) left at corridors/void decks/stairwells
+dirty public areas: littering, stained/dirty ground, mud/algae buildup, general unclean public spaces
+overflowing litter bins: bins full/overflowing, refuse chute/bin centre overflow, bin spillage around area
+high-rise littering: items thrown/dropped from height (cigarette butts, food, bottles), repeated littering from blocks
+abandoned trolley: supermarket trolleys left in common areas, pavements, void decks, carparks
+abandoned bicycle: abandoned/unused bicycles chained or dumped, blocking walkways, rusted/hazardous bikes
+
+choked drains or stagnant water: ponding water, blocked drains, stagnant water spots (mosquito risk)
+damaged drains: broken/missing drain covers, collapsed drains, damaged grates, exposed openings
+flooding: flash floods/ponding due to heavy rain, water entering walkways/roads/common areas
+sewer choke or overflow: sewage backing up, manholes overflowing, sewer water on ground
+sewage smell: persistent sewage/rotten smell near drains/manholes/bin areas
+
+dead animals: animal carcass found in public/common areas needing removal
+injured animals: injured/sick animals needing help/assistance
+bird issues: aggressive birds, nesting problems, droppings hotspots, birds trapped
+cat issues: stray cat concerns (overpopulation, feeding conflicts, nuisance, injured cats)
+dog issues: stray/loose dogs, aggressive dogs, dog poop issues
+other animal issues: any other animal-related concerns (monkeys, otters, snakes, etc.)
+cockroachs in food establishments: cockroach sightings/infestation in or around food premises
+mosquitoes: mosquito breeding risk (stagnant water), heavy mosquito presence, bite hotspots
+rodents in common areas: rats/mice in void decks, bin areas, corridors, drains, carparks
+rodents in food establishments: rats/mice seen in/around food premises and kitchens
+bees and hornets: beehives/wasp nests/hornet activity posing sting risk
+
+fallen trees or tree branches: fallen trees/branches obstructing paths/roads, safety hazard
+overgrown grass: overgrown vegetation blocking paths, unmanaged grass/weeds, hiding pests
+park facilties maintenance: damaged park benches/shelters/railings, broken fixtures, unsafe park equipment
+other parks and greenery issues: any other greenery/landscape issues (dying trees, soil erosion, poor upkeep)
+
+smoking (food premises): smoking at/near food premises where prohibited, smoke affecting patrons
+smoking (parks and park connections): smoking in parks/park connectors where prohibited or causing nuisance
+smoking (other public area): smoking at common areas/sheltered walkways/void decks where prohibited or causing nuisance
+
+construction noise: excessive construction/renovation noise, after-hours work, persistent loud machinery
+
+no water: water supply outage/no running water in unit/block
+water leakages: leaking pipes/taps, ceiling leaks, water seepage in common areas
+water pressure: unusually low/high water pressure issues
+water quality: discoloured/cloudy water, unusual smell/taste, suspected contamination
+
+others: anything that doesn’t fit above (e.g., fire hazards, electrical hazards, security/safety risks, urgent public danger)
 
 === TRIAGE RULES ===
 Severity:

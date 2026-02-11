@@ -3,6 +3,7 @@ info:
   title: Town Council Complaints API
   description: API for submitting and managing town council complaints
   version: 1.0.0
+
 servers:
   - url: https://gsbpchneovtpqgnyfttp.supabase.co/functions/v1
     description: Supabase Edge Functions
@@ -12,7 +13,7 @@ paths:
     post:
       operationId: submit_complaint
       summary: Submit a new complaint
-      description: Submit a complaint about town council issues (bin overflow, litter, blocked drains, etc.)
+      description: Submit a complaint about town council issues (parking, maintenance, drains, pests, smoking, water issues, etc.)
       requestBody:
         required: true
         content:
@@ -26,7 +27,7 @@ paths:
                 text:
                   type: string
                   description: Description of the complaint
-                  example: "Bin overflow at Block 123"
+                  example: "Overflowing litter bins near the lift lobby"
                 location_text:
                   type: string
                   description: Location of the issue (human-readable)
@@ -35,17 +36,55 @@ paths:
                   type: string
                   description: Category of complaint
                   enum:
-                    - litter
-                    - overflow
-                    - smell
-                    - cleaning
-                    - blocked_drain
-                    - pest
-                    - walkway_cleanliness
-                    - lighting
-                    - noise
-                    - other
-                  example: "overflow"
+                    - Illegal Parking Roads
+                    - illegal parking HDB carpark
+                    - Motorcycle at void deck
+                    - Lighting maintenance
+                    - common area maintenance
+                    - HDB car park maintenance
+                    - Playgrounds or fitness facilities maintenance
+                    - bulky waste in common areas
+                    - dirty public areas
+                    - overflowing litter bins
+                    - high-rise littering
+                    - Damaged road signs
+                    - faulty streetlights
+                    - covered linkway maintenance
+                    - road maintenance
+                    - footpath maintenance
+                    - choked drains or stagnant water
+                    - damaged drains
+                    - flooding
+                    - sewer choke or overflow
+                    - sewage smell
+                    - dead animals
+                    - injured animals
+                    - bird issues
+                    - cat issues
+                    - dog issues
+                    - other animal issues
+                    - cockroachs in food establishments
+                    - mosquitoes
+                    - rodents in common areas
+                    - rodents in food establishments
+                    - bees and hornets
+                    - fallen trees or tree branches
+                    - overgrown grass
+                    - park lighting maintenance
+                    - park facilties maintenance
+                    - other parks and greenery issues
+                    - smoking (food premises)
+                    - smoking (parks and park connections)
+                    - smoking (other public area)
+                    - construction noise
+                    - abandoned trolley
+                    - abandoned bicycle
+                    - no water
+                    - water leakages
+                    - water pressure
+                    - water quality
+                    - others
+                  example: "overflowing litter bins"
                 severity:
                   type: integer
                   description: Severity level (1-5)
@@ -61,7 +100,7 @@ paths:
                     - week
                   example: "today"
       responses:
-        '200':
+        "200":
           description: Complaint submitted successfully
           content:
             application/json:
@@ -70,13 +109,16 @@ paths:
                 properties:
                   success:
                     type: boolean
+                    example: true
                   complaint_id:
                     type: string
+                    example: "cmp_01HZA1B2C3D4E5F6G7"
                   message:
                     type: string
-        '400':
+                    example: "Complaint submitted successfully"
+        "400":
           description: Bad request
-        '500':
+        "500":
           description: Server error
 
 components:
