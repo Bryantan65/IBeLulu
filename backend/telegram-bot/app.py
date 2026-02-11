@@ -1,6 +1,8 @@
 import json
+import mimetypes
 import os
 import time
+import urllib.error
 import urllib.request
 import urllib.parse
 from typing import Dict, List, Optional, Set
@@ -89,8 +91,13 @@ def http_request_raw(
     if headers:
         for key, value in headers.items():
             req.add_header(key, value)
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        return resp.read()
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            return resp.read()
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode('utf-8', errors='replace')
+        log(f'HTTP {exc.code} from {method} {url}: {body}')
+        raise
 
 
 def download_telegram_file(file_id: str) -> tuple:
@@ -118,12 +125,18 @@ def upload_to_supabase_storage(task_id: str, field_name: str, file_bytes: bytes,
 
     upload_url = f"{SUPABASE_URL}/storage/v1/object/evidence-photos/{encoded_path}"
 
+    content_type, _ = mimetypes.guess_type(filename)
+    if not content_type:
+        content_type = 'image/jpeg'
+
+    auth_key = SUPABASE_SERVICE_ROLE_KEY or SUPABASE_API_KEY
     http_request_raw(
         upload_url,
         method='POST',
         headers={
-            'Authorization': f'Bearer {SUPABASE_SERVICE_ROLE_KEY}',
-            'Content-Type': 'image/jpeg',
+            'apikey': auth_key,
+            'Authorization': f'Bearer {auth_key}',
+            'Content-Type': content_type,
             'x-upsert': 'true',
         },
         body_bytes=file_bytes,
